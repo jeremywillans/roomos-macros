@@ -4,6 +4,11 @@ Macro for adding a Join Zoom button and showing a Zoom Controls menu when on an 
 
 Matches Zoom Calls using the following Regex String - `(@zm..\.us|@zoomcrc.com)`
 
+![Call Control](call_control.png)
+![Zoom Menu](zoom_menu.png)
+
+## Reference
+
 [Zoom DTMF Menu](https://support.zoom.us/hc/en-us/articles/115005889546-H-323-SIP-Menu)
 
 ## Disclamer
