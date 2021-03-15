@@ -1,6 +1,6 @@
 # ZoomControls
 
-Macro for showing a Zoom Controls menu when on an active Zoom Call
+Macro for adding a Join Zoom button and showing a Zoom Controls menu when on an active Zoom Call
 
 Matches Zoom Calls using the following Regex String - `(@zm..\.us|@zoomcrc.com)`
 
