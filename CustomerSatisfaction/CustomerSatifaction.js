@@ -31,7 +31,7 @@ const WEBEXSPACE_ENABLED = false; // Enable for Webex Space Message Logging
 const SERVICENOW_ENABLED = false; // Enable for Service NOW Incident Raise
 
 const CLEANUP_TIMEOUT = 3000; // Milliseconds before cleanup variables
-const CALL_DURATION = 0; // Mininium call duration before Survey is displayed
+const CALL_DURATION = 10; // Mininium call duration (seconds) before Survey is displayed
 
 var callInfo = {}, systemInfo = {}, userInfo = {}, qualityInfo = {};
 
