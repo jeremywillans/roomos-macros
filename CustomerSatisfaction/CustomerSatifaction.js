@@ -1,3 +1,17 @@
+/*
+# Customer Satisfaction Survey Macro
+# Written by Jeremy Willans
+# https://github.com/jeremywillans/roomos-macros
+# Version: 1.0
+#
+# USE AT OWN RISK, MACRO NOT FULLY TESTED NOR SUPPLIED WITH ANY GURANTEE
+#
+# Usage - Shows Survery at end of call which output into Webex Space and/or Serivce Now Incident.
+#
+# Change History
+# 1.0 20210308 Initial Release
+#
+*/
 const xapi = require('xapi');
 
 const ROOMID = '#### ROOMID ####'; // Specify a Room ID
@@ -13,8 +27,8 @@ const USERS_URL = 'https://' + SERVICE_NOW_INSTANCE_URL + '/api/now/table/sys_us
 const SERVICENOW_USERNAMEPWD_BASE64 = '#### BASE64_CREDS ####'; // format is "username:password" for basic Authorization. This needs to be base64-encoded. Use e.g. https://www.base64encode.org/ to do this
 const SERVICENOW_AUTHTOKEN = "Authorization: Basic " + SERVICENOW_USERNAMEPWD_BASE64; // SNOW PERMISSIONS NEEDED - sn_incident_write
 
-const WEBEXSPACE_ENABLED = true; // Enable for Webex Space Message Logging
-const SERVICENOW_ENABLED = true; // Enable for Service NOW Incident Raise
+const WEBEXSPACE_ENABLED = false; // Enable for Webex Space Message Logging
+const SERVICENOW_ENABLED = false; // Enable for Service NOW Incident Raise
 
 const CLEANUP_TIMEOUT = 3000; // Milliseconds before cleanup variables
 const CALL_DURATION = 0; // Mininium call duration before Survey is displayed
