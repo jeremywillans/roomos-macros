@@ -1,5 +1,18 @@
-// Zoom Control Macro
-
+/*
+# Zoom Controls Macro
+# Written by Jeremy Willans
+# https://github.com/jeremywillans/roomos-macros
+# Version: 1.1
+#
+# USE AT OWN RISK, MACRO NOT FULLY TESTED NOR SUPPLIED WITH ANY GURANTEE
+#
+# Usage - Shows DTMF Controls Menu during Zoom Call and adds Join Zoom button to UI Controller
+#
+# Change History
+# 1.0 20210308 Initial Release
+# 1.1 20210317 Add option to remove Join Zoom button
+#
+*/
 import xapi from 'xapi';
 
 const ZOOMDIALPAD_DOMAIN = '@zmau.us'
@@ -7,6 +20,9 @@ const ZOOMDIALPAD_ID = 'zoom_dialpad';
 const ZOOMJOIN_PANELID = 'zoom_join';
 const ZOOMCONTROLS_PANELID = 'zoom_controls';
 const ZOOM_MATCHURI = "(@zm..\.us|@zoomcrc.com)";
+
+// Set to False to not add "Join Zoom" button to UI
+const ZOOM_ADDJOINBUTTON = true;
 
 const sleep = (timeout) => new Promise((resolve) => {
   setTimeout(resolve, timeout);
@@ -283,11 +299,33 @@ async function removeZoomControls() {
   });
 }
 
+async function removeZoomJoin() {
+  const config = await xapi.Command.UserInterface.Extensions.List();
+  if (config.Extensions) {
+    const panelExist = config.Extensions.Panel.find((panel) => panel.PanelId === ZOOMJOIN_PANELID);
+    if (!panelExist) {
+      console.debug('ZoomJoin does not exist');
+      return;
+    }
+  }
+
+  console.debug(`Removing ZoomJoin`);
+  await xapi.Command.UserInterface.Extensions.Panel.Close();
+  await xapi.Command.UserInterface.Extensions.Panel.Remove({
+    PanelId: ZOOMJOIN_PANELID,
+  });
+}
+
 // Init function - Listen for Calls and check if matches partial Zoom URI
 function init() {
 
-  // Ensure Join Zoom is visible
-  addZoomJoin();
+  // Implement Zoom Join button selection
+  if (ZOOM_ADDJOINBUTTON) {
+    addZoomJoin();
+  } else {
+    removeZoomJoin();
+  }
+  
   // Remove lingering Zoom Controls during init.
   removeZoomControls();
 
