@@ -2,15 +2,16 @@
 # Zoom Controls Macro
 # Written by Jeremy Willans
 # https://github.com/jeremywillans/roomos-macros
-# Version: 1.1
+# Version: 1.2
 #
-# USE AT OWN RISK, MACRO NOT FULLY TESTED NOR SUPPLIED WITH ANY GURANTEE
+# USE AT OWN RISK, MACRO NOT FULLY TESTED NOR SUPPLIED WITH ANY GUARANTEE
 #
 # Usage - Shows DTMF Controls Menu during Zoom Call and adds Join Zoom button to UI Controller
 #
 # Change History
 # 1.0 20210308 Initial Release
 # 1.1 20210317 Add option to remove Join Zoom button
+# 1.2 20210506 Handle no existing Panels, fix Typos.
 #
 */
 import xapi from 'xapi';
@@ -22,13 +23,14 @@ const ZOOMCONTROLS_PANELID = 'zoom_controls';
 const ZOOM_MATCHURI = "(@zm..\.us|@zoomcrc.com)";
 
 // Set to False to not add "Join Zoom" button to UI
+// NOTE: If set to false, this will also remove it from the UI
 const ZOOM_ADDJOINBUTTON = true;
 
 const sleep = (timeout) => new Promise((resolve) => {
   setTimeout(resolve, timeout);
 });
 
-// Function to show Zoom Dialpad 
+// Function to show Zoom Dial Pad 
 function showDialPad(){
          xapi.command("UserInterface Message TextInput Display", {
                InputType: 'Numeric'
@@ -52,13 +54,13 @@ xapi.event.on('UserInterface Message TextInput Response', (event) => {
     switch(event.FeedbackId){
         case ZOOMDIALPAD_ID:
         const myText = String(event.Text)
-            const numbertodial = myText + ZOOMDIALPAD_DOMAIN;
-            xapi.command("dial", {Number: numbertodial}).catch((error) => { console.error(error); });
+            const dialNumber = myText + ZOOMDIALPAD_DOMAIN;
+            xapi.command("dial", {Number: dialNumber}).catch((error) => { console.error(error); });
             break;
     }
 });
 
-// Function to send the DTMF tones during the call.  This receives the DTMF tones from the Event Listenter below.
+// Function to send the DTMF tones during the call.  This receives the DTMF tones from the Event Listener below.
 async function sendDTMF(code, message) {
     console.log(message);
 
@@ -93,23 +95,23 @@ xapi.Event.UserInterface.Extensions.Widget.Action.on((event) => {
     return;
   }
     switch (event.WidgetId) {
-      case "changelayout":
+      case "changeLayout":
         return sendDTMF(11, 'Change Layout was Pressed');
       
-      case "audiomute":
+      case "audioMute":
         return sendDTMF(12, 'Audio was Pressed');
         
-      case "videomute":
+      case "videoMute":
         return sendDTMF(14, 'Video Mute was Pressed');
         
       case "record":
         return sendDTMF(15, 'Record was Pressed');
         
-      case "videonames":
+      case "videoNames":
         return sendDTMF(102, 'Toggle Names was Pressed');
       
       case "participants":
-        return sendDTMF(106, 'Show Participants was Pressed');
+        return sendDTMF(16, 'Show Participants was Pressed');
 
       case "chat":
         return sendDTMF(107, 'Toggle Chat was Pressed');
@@ -117,10 +119,10 @@ xapi.Event.UserInterface.Extensions.Widget.Action.on((event) => {
       case "captions":
         return sendDTMF(108, 'Toggle Chat was Pressed');
 
-      case "gallerynext":
+      case "galleryNext":
         return sendDTMF(106, 'Gallery Next was Pressed');
 
-      case "galleryprevious":
+      case "galleryPrevious":
         return sendDTMF(104, 'Gallery Previous was Pressed');     
         
       case "exit":
@@ -130,7 +132,7 @@ xapi.Event.UserInterface.Extensions.Widget.Action.on((event) => {
 
 async function addZoomJoin() {
   const config = await xapi.Command.UserInterface.Extensions.List();
-  if (config.Extensions) {
+  if (config.Extensions.Panel) {
     const zoomJoin = config.Extensions.Panel.find((panel) => panel.PanelId === ZOOMJOIN_PANELID);
     if (zoomJoin) {
       console.debug('ZoomJoin already added');
@@ -161,7 +163,7 @@ async function addZoomJoin() {
 
 async function addZoomControls() {
   const config = await xapi.Command.UserInterface.Extensions.List();
-  if (config.Extensions) {
+  if (config.Extensions.Panel) {
     const panelExist = config.Extensions.Panel.find((panel) => panel.PanelId === ZOOMCONTROLS_PANELID);
     if (panelExist) {
       console.debug('ZoomControls already added');
@@ -187,13 +189,13 @@ async function addZoomControls() {
       <Row>
         <Name>Call Controls</Name>
         <Widget>
-          <WidgetId>changelayout</WidgetId>
+          <WidgetId>changeLayout</WidgetId>
           <Name>Change Layout</Name>
           <Type>Button</Type>
           <Options>size=2</Options>
         </Widget>
         <Widget>
-          <WidgetId>audiomute</WidgetId>
+          <WidgetId>audioMute</WidgetId>
           <Name>Mute</Name>
           <Type>Button</Type>
           <Options>size=2</Options>
@@ -202,7 +204,7 @@ async function addZoomControls() {
       <Row>
         <Name>Meeting Controls</Name>
         <Widget>
-          <WidgetId>videomute</WidgetId>
+          <WidgetId>videoMute</WidgetId>
           <Name>Video Mute</Name>
           <Type>Button</Type>
           <Options>size=2</Options>
@@ -214,7 +216,7 @@ async function addZoomControls() {
           <Options>size=2</Options>
         </Widget>
         <Widget>
-          <WidgetId>videonames</WidgetId>
+          <WidgetId>videoNames</WidgetId>
           <Name>Toggle Names</Name>
           <Type>Button</Type>
           <Options>size=2</Options>
@@ -241,13 +243,13 @@ async function addZoomControls() {
       <Row>
         <Name>Gallery View Controls</Name>
         <Widget>
-          <WidgetId>gallerynext</WidgetId>
+          <WidgetId>galleryNext</WidgetId>
           <Name>Next</Name>
           <Type>Button</Type>
           <Options>size=2</Options>
         </Widget>
         <Widget>
-          <WidgetId>galleryprevious</WidgetId>
+          <WidgetId>galleryPrevious</WidgetId>
           <Name>Previous</Name>
           <Type>Button</Type>
           <Options>size=2</Options>
@@ -284,7 +286,7 @@ async function addZoomControls() {
 
 async function removeZoomControls() {
   const config = await xapi.Command.UserInterface.Extensions.List();
-  if (config.Extensions) {
+  if (config.Extensions.Panel) {
     const panelExist = config.Extensions.Panel.find((panel) => panel.PanelId === ZOOMCONTROLS_PANELID);
     if (!panelExist) {
       console.debug('ZoomControls does not exist');
@@ -301,7 +303,7 @@ async function removeZoomControls() {
 
 async function removeZoomJoin() {
   const config = await xapi.Command.UserInterface.Extensions.List();
-  if (config.Extensions) {
+  if (config.config.Extensions.Panel) {
     const panelExist = config.Extensions.Panel.find((panel) => panel.PanelId === ZOOMJOIN_PANELID);
     if (!panelExist) {
       console.debug('ZoomJoin does not exist');
