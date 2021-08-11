@@ -98,24 +98,25 @@ function postContent(){
       break;
   }
 
-  var richtext = ('<strong>Call Quality Report - ' + qualityInfo.rating + '</strong>' + blockquote +
-    '\n<strong>System Name:</strong> ' + systemInfo.systemName +
-    '\n<strong>Serial Number:</strong> ' + systemInfo.serialNumber +
-    '\n<strong>SW Release:</strong> ' + systemInfo.softwareVersion)
-  if (callInfo.RequestedURI != '') { richtext += ('\n\n<strong>Dial String:</strong> <code>' + callInfo.RequestedURI + '</code> ') };
-  if (callInfo.Duration != '') { richtext += ('\n<strong>Call Duration:</strong> ' + formatTime(callInfo.Duration)) };
-  if (callInfo.CauseType != '') { richtext += ('\n<strong>Disconnect Cause:</strong> ' + callInfo.CauseType) };
-  if (qualityInfo.issue != '') { richtext += ('\n\n<strong>Quality Issue:</strong> ' + qualityInfo.issue) };
-  if (qualityInfo.feedback != '') { richtext += ('\n<strong>Quality Feedback:</strong> ' + qualityInfo.feedback) };
-  if (qualityInfo.incident != '') { richtext += ('\n<strong>Incident Ref:</strong> ' + qualityInfo.incident) };
+  var markdown = ('**Call Quality Report - ' + qualityInfo.rating + '**' + blockquote +
+    '**System Name:** ' + systemInfo.systemName +
+    '  \n**Serial Number:** ' + systemInfo.serialNumber +
+    '  \n**SW Release:** ' + systemInfo.softwareVersion)
+  if (callInfo.RequestedURI != '') { markdown += ('\n**Dial String:** `' + callInfo.RequestedURI + '`') };
+  if (callInfo.Duration != '') { markdown += ('  \n**Call Duration:** ' + formatTime(callInfo.Duration)) };
+  if (callInfo.CauseType != '') { markdown += ('  \n**Disconnect Cause:** ' + callInfo.CauseType) };
+  if (qualityInfo.issue != '') { markdown += ('  \n**Quality Issue:** ' + qualityInfo.issue) };
+  if (qualityInfo.feedback != '') { markdown += ('  \n**Quality Feedback:** ' + qualityInfo.feedback) };
+  if (qualityInfo.incident != '') { markdown += ('  \n**Incident Ref:** ' + qualityInfo.incident) };
   if (userInfo.sys_id != '') {
-    richtext += ('\n<strong>Reporter:</strong> <a href=webexteams://im?email=' + userInfo.email + '>' + userInfo.name + '</a> (' + userInfo.email + ')') 
+    markdown += ('  \n**Reporter:**  [' + userInfo.name + '](webexteams://im?email=' + userInfo.email + ') (' + userInfo.email + ')') 
   } else if (qualityInfo.reporter != '') { 
     // Include Provided Email if not matched in SNOW
-    richtext += ('\n<strong>Provided Email:</strong> ' + qualityInfo.reporter);
+    markdown += ('  \n**Provided Email:** ' + qualityInfo.reporter);
   };
- 
-  var messagecontent = {roomId: ROOMID,html: richtext};
+  markdown += '</blockquote>'
+
+  var messagecontent = {roomId: ROOMID, markdown};
 
   xapi.command('HttpClient Post', {'Header': [CONTENT_TYPE, ACCEPT_TYPE, WEBEX_AUTHTOKEN], 'Url': MESSAGE_URL}, JSON.stringify(messagecontent))
   .then((result) => {
