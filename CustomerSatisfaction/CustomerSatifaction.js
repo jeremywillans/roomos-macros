@@ -10,6 +10,7 @@
 #
 # Change History
 # 1.0 20210308 Initial Release
+# 1.1 20220209 Add Timeout to Issue Prompt
 #
 */
 const xapi = require('xapi');
@@ -298,6 +299,7 @@ xapi.event.on('UserInterface Message Prompt Response', (event) => {
       }
       sleep(200).then(() => {
         xapi.command("UserInterface Message Prompt Display", {
+            Duration: 20,
             Title: "Call Experience Feedback"
           , Text: 'What is the primary issue for your rating of ' + qualityInfo.rating + '?'
           , FeedbackId: 'feedback_step1'
@@ -332,32 +334,6 @@ xapi.event.on('UserInterface Message Prompt Response', (event) => {
         }).catch((error) => { console.error(error); });
       });
       break;
-    /*
-    case 'nocallrating':
-      switch(event.OptionId){
-        case '1':
-          displaytitle = 'Call Experience Feedback';
-          displaytext = 'Ok, maybe we need to make larger buttons..';
-          break;
-        case '2':
-          displaytitle = 'Call Experience Feedback';
-          displaytext = 'Ok, do you want to try to debug?';
-          break;
-        case '3':
-          displaytitle = 'Call Experience Feedback';
-          displaytext = 'Oops, maybe we need a simpler user interface';
-          break;
-        default:
-          console.debug('Unhandled Response');
-          return;
-        }
-        xapi.command("UserInterface Message Alert Display", {
-            Title: displaytitle
-          , Text: displaytext
-          , Duration: 5
-        }).catch((error) => { console.error(error); 
-      });
-    */
     }
 });
 
@@ -383,10 +359,10 @@ function init(){
   // Get System Name / Contact Name
   //xapi.config.get('SystemUnit Name').then((value) => {
   xapi.status.get('UserInterface ContactInfo Name').then((value) => {
-    if(value === ''){
-        xapi.status.get('SystemUnit Hardware Module SerialNumber').then((value) => {
-          systemInfo.systemName = value;
-        });
+    if (value === '') {
+      xapi.status.get('SystemUnit Hardware Module SerialNumber').then((value) => {
+        systemInfo.systemName = value;
+      });
     }
     else{
       systemInfo.systemName = value;
