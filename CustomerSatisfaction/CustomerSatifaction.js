@@ -23,7 +23,7 @@ const CONTENT_TYPE = "Content-Type: application/json";
 const ACCEPT_TYPE = "Accept: application/json";
 const MESSAGE_URL = 'https://webexapis.com/v1/messages'; // Message URL
 
-const HTTPPOST_URL = 'http://172.19.98.72:3005'; // HTTP POST URL
+const HTTPPOST_URL = 'http://10.xx.xx.xx:3000'; // HTTP POST URL
 const HTTPPOST_SIGNATURE = 'supersecret123'; // Authorization Header Signature for HTTP POST
 const HTTPPOST_AUTHTOKEN = "Authorization: " + HTTPPOST_SIGNATURE;
 
