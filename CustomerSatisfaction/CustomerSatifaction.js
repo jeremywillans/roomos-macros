@@ -2,25 +2,30 @@
 # Customer Satisfaction Survey Macro
 # Written by Jeremy Willans
 # https://github.com/jeremywillans/roomos-macros
-# Version: 1.0
+# Version: 1.2
 #
-# USE AT OWN RISK, MACRO NOT FULLY TESTED NOR SUPPLIED WITH ANY GURANTEE
+# USE AT OWN RISK, MACRO NOT FULLY TESTED NOR SUPPLIED WITH ANY GUARANTEE
 #
-# Usage - Shows Survery at end of call which output into Webex Space and/or Serivce Now Incident.
+# Usage - Shows Survey at end of call which output into Webex Space and/or Service Now Incident.
 #
 # Change History
 # 1.0 20210308 Initial Release
 # 1.1 20220209 Add Timeout to Issue Prompt
+# 1.2 20220524 Add HTTP JSON POST Option
 #
 */
 const xapi = require('xapi');
 
 const ROOMID = '#### ROOMID ####'; // Specify a Room ID
 const BOTID = '#### BOTID ####'; // Specify a Bot ID
-const WEBEX_AUTHTOKEN = "Authorization: Bearer " + BOTID
+const WEBEX_AUTHTOKEN = "Authorization: Bearer " + BOTID;
 const CONTENT_TYPE = "Content-Type: application/json";
 const ACCEPT_TYPE = "Accept: application/json";
 const MESSAGE_URL = 'https://webexapis.com/v1/messages'; // Message URL
+
+const HTTPPOST_URL = 'http://172.19.98.72:3005'; // HTTP POST URL
+const HTTPPOST_SIGNATURE = 'supersecret123'; // Authorization Header Signature for HTTP POST
+const HTTPPOST_AUTHTOKEN = "Authorization: " + HTTPPOST_SIGNATURE;
 
 const SERVICE_NOW_INSTANCE_URL = '#### INSTANCE ####.service-now.com'; // Specify a URL to a service like serviceNow etc.
 const INCIDENT_URL = 'https://' + SERVICE_NOW_INSTANCE_URL + '/api/now/table/incident'; // Specify a URL to a service like serviceNow etc.
@@ -30,11 +35,13 @@ const SERVICENOW_AUTHTOKEN = "Authorization: Basic " + SERVICENOW_USERNAMEPWD_BA
 
 const WEBEXSPACE_ENABLED = false; // Enable for Webex Space Message Logging
 const SERVICENOW_ENABLED = false; // Enable for Service NOW Incident Raise
+const HTTPPOST_ENABLED = true; // Enable for JSON HTTP POST Destination
+const EXCELLENT_DEFAULT = false; // Enable to send Excellent result if no user input
 
 const CLEANUP_TIMEOUT = 3000; // Milliseconds before cleanup variables
-const CALL_DURATION = 10; // Mininium call duration (seconds) before Survey is displayed
+const CALL_DURATION = 10; // Minimum call duration (seconds) before Survey is displayed
 
-var callInfo = {}, systemInfo = {}, userInfo = {}, qualityInfo = {};
+var callInfo = {}, systemInfo = {}, userInfo = {}, qualityInfo = {}, showFeedback = true;
 
 // Initialize Variable 
 function initVariables() {
@@ -45,6 +52,7 @@ function initVariables() {
     , reporter : ''
     , incident : ''
   };
+  showFeedback = true;
   userInfo = { sys_id: '' };
 }
 
@@ -74,11 +82,23 @@ function formatTime(seconds) {
 
 // Process Enabled Services
 function processRequest() {
-  if (SERVICENOW_ENABLED) {
+  if (HTTPPOST_ENABLED) {
+    postJSON();
+  }
+  if (SERVICENOW_ENABLED && qualityInfo.rating !== 'Excellent') {
     raiseTicket();
   }
   if ((WEBEXSPACE_ENABLED) && (!SERVICENOW_ENABLED)) {
     postContent();
+  }
+  if (showFeedback && (!WEBEXSPACE_ENABLED) && ((SERVICENOW_ENABLED && qualityInfo.rating === 'Excellent') || (!SERVICENOW_ENABLED))) {
+    sleep(600).then(() => {
+      xapi.command("UserInterface Message Alert Display", {
+        Title: 'Acknowledgement'
+      , Text: 'Thanks for you feedback!'
+      , Duration: 5
+      }).catch((error) => { console.error(error); })
+    });
   }
   sleep(CLEANUP_TIMEOUT).then(() => {
     console.debug('Init Variables');
@@ -88,9 +108,12 @@ function processRequest() {
 
 // Post Content to Webex Space
 function postContent(){
-  //console.log('Process postContent function');
+  console.debug('Process postContent function');
   let blockquote;
   switch (qualityInfo.rating) {
+    case 'Excellent':
+      blockquote = '<blockquote class=success>';
+      break;
     case 'Average':
       blockquote = '<blockquote class=warning>';
       break;
@@ -121,7 +144,7 @@ function postContent(){
 
   xapi.command('HttpClient Post', {'Header': [CONTENT_TYPE, ACCEPT_TYPE, WEBEX_AUTHTOKEN], 'Url': MESSAGE_URL}, JSON.stringify(messagecontent))
   .then((result) => {
-    if (!SERVICENOW_ENABLED) {
+    if (!SERVICENOW_ENABLED && showFeedback) {
       if (result.StatusCode = '200') {
         xapi.command("UserInterface Message Alert Display", {
             Title: 'Acknowledgement'
@@ -141,6 +164,34 @@ function postContent(){
   .catch((error) => { console.error(error); })
 }
 
+// Post JSON Content to HTTP Server
+function postJSON() {
+  console.debug('Process postJSON function');
+  const message = {
+    system: systemInfo.systemName,
+    serial: systemInfo.serialNumber,
+    software: systemInfo.softwareVersion,
+    rating: qualityInfo.rating,
+    destination: callInfo.RequestedURI,
+    duration: callInfo.Duration,
+    duration_fmt: formatTime(callInfo.Duration),
+    cause: callInfo.CauseType,
+    issue: qualityInfo.issue,
+    feedback: qualityInfo.feedback,
+    reporter: qualityInfo.reporter
+  };
+
+  xapi.command('HttpClient Post', {'Header': [CONTENT_TYPE, ACCEPT_TYPE, HTTPPOST_AUTHTOKEN], 'Url': HTTPPOST_URL}, JSON.stringify(message))
+  .then((result) => {
+    if (result.StatusCode = '200') {
+      console.debug('json sent');
+    } else {
+      console.error(result);
+    }
+  })
+  .catch((error) => { console.error(error); })
+}
+
 // Service Now Get Sub-Function to Obtain Incident URL
 function getServiceNowIncidentIdFromURL(url) {
     return xapi.command('HttpClient Get', { 'Header': [CONTENT_TYPE, SERVICENOW_AUTHTOKEN] , 'Url': url});
@@ -154,7 +205,7 @@ function getServiceNowUserIdFromEmail(email) {
 
 // Debugging Button
 xapi.event.on('UserInterface Extensions Panel Clicked', (event) => {
-  if(event.PanelId == 'call_disconnect'){
+  if (event.PanelId == 'call_disconnect1'){
     qualityInfo.rating = 'Poor';
     qualityInfo.reporter = 'aileen.mottern@example.com';
     callInfo.Duration = 15;
@@ -162,11 +213,17 @@ xapi.event.on('UserInterface Extensions Panel Clicked', (event) => {
     callInfo.CauseType = 'LocalDisconnect'
     processRequest();
   }
+  if (event.PanelId == 'call_disconnect'){
+    callInfo.Duration = 15;
+    callInfo.RequestedURI = 'spark:123456789@webex.com'
+    callInfo.CauseType = 'LocalDisconnect'
+    initialMenu();
+  }
 });
 
 // Raise Ticket in Service Now Instance
 async function raiseTicket(){
-  //console.log('Process raiseTicket function');
+  console.debug('Process raiseTicket function');
   var description = ('Call Quality Report - ' + qualityInfo.rating +
     '\n\nSystem Name: ' + systemInfo.systemName +
     '\nSerial Number: ' + systemInfo.serialNumber +
@@ -208,7 +265,7 @@ async function raiseTicket(){
     getServiceNowIncidentIdFromURL(serviceNowIncidentURL).then(
     (result) => {
       var body = result.Body;
-      //console.log('Got this from getServiceNowIncidentIdFromURL: ' + JSON.stringify(result));
+      console.debug('Got this from getServiceNowIncidentIdFromURL: ' + JSON.stringify(result));
       serviceNowIncidentTicket =  JSON.parse(body).result.number;
       xapi.command("UserInterface Message Alert Display", {
           Title: 'Acknowledgement'
@@ -220,20 +277,19 @@ async function raiseTicket(){
         postContent();
       }
     });
-    //console.log('Got this from raiseTicket: ' + JSON.stringify(result));
+    console.debug('Got this from raiseTicket: ' + JSON.stringify(result));
   });
 }
 
-// Process Call Disconnect Event
-xapi.event.on('CallDisconnect', (event) => {
-  callInfo = event;
-  if(event.Duration > CALL_DURATION) {
+function initialMenu() {
+  var excellentText = EXCELLENT_DEFAULT ? 'Excellent (default)' : 'Excellent';
+  if (callInfo.Duration > CALL_DURATION) {
     xapi.command("UserInterface Message Prompt Display", {
         Duration: 20
       , Title: "Call Experience Feedback"
       , Text: 'How would you rate your call today?'
       , FeedbackId: 'callrating'
-      , 'Option.1' : 'Excellent'
+      , 'Option.1' : excellentText
       , 'Option.2' : 'Average'
       , 'Option.3' : 'Poor'
       }).catch((error) => { console.error(error); });
@@ -249,11 +305,17 @@ xapi.event.on('CallDisconnect', (event) => {
     }).catch((error) => { console.error(error); });
     */
   }
+}
+
+// Process Call Disconnect Event
+xapi.event.on('CallDisconnect', (event) => {
+  callInfo = event;
+  initialMenu();
 });
 
 // Process responses to TextInput Prompts
 xapi.event.on('UserInterface Message TextInput Response', (event) => {
-  switch(event.FeedbackId){
+  switch (event.FeedbackId){
     case 'feedback_step2':
       qualityInfo.feedback = event.Text;
       sleep(200).then(() => {
@@ -279,13 +341,10 @@ xapi.event.on('UserInterface Message TextInput Response', (event) => {
 xapi.event.on('UserInterface Message Prompt Response', (event) => {
   switch(event.FeedbackId){
     case 'callrating':
-      switch(event.OptionId) {
+      switch (event.OptionId) {
         case '1':
-          xapi.command("UserInterface Message Alert Display", {
-              Title: 'Acknowledgement'
-            , Text: 'Thanks for you feedback! Have an awesome day!'
-            , Duration: 5
-          }).catch((error) => { console.error(error); })
+          qualityInfo.rating = 'Excellent';
+          processRequest();
           return;
         case '2':
           qualityInfo.rating = 'Average';
@@ -339,7 +398,14 @@ xapi.event.on('UserInterface Message Prompt Response', (event) => {
 
 // Process Clear/Cancel/Closure of Prompt dialogues
 xapi.event.on('UserInterface Message Prompt Cleared', (event) => {
-  switch(event.FeedbackId) {
+  showFeedback = false;
+  switch (event.FeedbackId) {
+    case 'callrating':
+      if (EXCELLENT_DEFAULT) {
+        qualityInfo.rating = 'Excellent';
+        processRequest();
+      }
+      return;
     case 'feedback_step1':
       processRequest();
   }
@@ -347,7 +413,8 @@ xapi.event.on('UserInterface Message Prompt Cleared', (event) => {
 
 // Process Clear/Cancel/Closure of TextInput dialogues
 xapi.event.on('UserInterface Message TextInput Clear', (event) => {
-  switch(event.FeedbackId) {
+  showFeedback = false;
+  switch (event.FeedbackId) {
     case 'feedback_step2':
     case 'feedback_step3':
       processRequest();
@@ -363,8 +430,7 @@ function init(){
       xapi.status.get('SystemUnit Hardware Module SerialNumber').then((value) => {
         systemInfo.systemName = value;
       });
-    }
-    else{
+    } else {
       systemInfo.systemName = value;
     }
   });
