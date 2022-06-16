@@ -122,7 +122,6 @@ function init() {
         // Disable Ultrasound
         await xapi.config.set("Audio Ultrasound MaxVolume:", "0");
       }
-      await setButton(result);
     }
   });
 }
