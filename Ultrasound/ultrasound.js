@@ -20,7 +20,7 @@ const BUTTON_ENABLED = true; // Adds/Removes button from UI
 
 async function addButton() {
   const config = await xapi.Command.UserInterface.Extensions.List();
-  if (config.Extensions.Panel) {
+  if (config.Extensions && config.Extensions.Panel) {
     const ultrasound = config.Extensions.Panel.find(
       (panel) => panel.PanelId === ULTRASOUND_ID
     );
@@ -61,7 +61,7 @@ async function addButton() {
 
 async function removeButton() {
   const config = await xapi.Command.UserInterface.Extensions.List();
-  if (config.config.Extensions.Panel) {
+  if (config.Extensions && config.Extensions.Panel) {
     const panelExist = config.Extensions.Panel.find(
       (panel) => panel.PanelId === ULTRASOUND_ID
     );
