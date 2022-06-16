@@ -4,6 +4,7 @@ Macros for Webex RoomOS
 
 - Zoom Controls
 - Customer Satisfaction
+- Ultrasound
 
 
 ## Disclamer
