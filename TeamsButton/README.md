@@ -4,7 +4,7 @@ Adds a button on the UI allowing to join MS Teams VIMT/CVI Meetings
 
 ## Requirements
 
-The VIDEO_DOMAIN variable needs to be updated to reflect your VIMT/CVI Tenant
+The VIMT_TENANT variable needs to be updated to reflect your VIMT Tenant
 
 ## Disclaimer
 
