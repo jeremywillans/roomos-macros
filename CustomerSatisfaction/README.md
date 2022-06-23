@@ -15,7 +15,7 @@ Does not require all questions to be completed for data to be captured, any data
 SNOW Integration requires a local user account with the following Role
 - sn_incident_write
 
-## Disclamer
+## Disclaimer
 
 This macro is NOT guaranteed to be bug free and production quality.
 

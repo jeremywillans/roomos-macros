@@ -7,6 +7,6 @@ Macros for Webex RoomOS
 - Ultrasound
 
 
-## Disclamer
+## Disclaimer
 
 These macros are NOT guaranteed to be bug free and production quality.
