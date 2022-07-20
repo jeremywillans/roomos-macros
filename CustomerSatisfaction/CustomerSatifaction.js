@@ -2,7 +2,7 @@
 # Customer Satisfaction Survey Macro
 # Written by Jeremy Willans
 # https://github.com/jeremywillans/roomos-macros
-# Version: 1.2
+# Version: 1.3
 #
 # USE AT OWN RISK, MACRO NOT FULLY TESTED NOR SUPPLIED WITH ANY GUARANTEE
 #
@@ -12,6 +12,7 @@
 # 1.0 20210308 Initial Release
 # 1.1 20220209 Add Timeout to Issue Prompt
 # 1.2 20220524 Add HTTP JSON POST Option
+# 1.3 20220720 Add Timestamp to JSON Message
 #
 */
 const xapi = require('xapi');
@@ -168,6 +169,7 @@ function postContent(){
 function postJSON() {
   console.debug('Process postJSON function');
   const message = {
+    timestamp: Date.now(),
     system: systemInfo.systemName,
     serial: systemInfo.serialNumber,
     software: systemInfo.softwareVersion,
