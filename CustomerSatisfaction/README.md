@@ -57,7 +57,7 @@ The following items are needed, depending on the enabled services.
 
 The macro contains two events for testing the Survey without the need to make outbound calls.
 
-These can be invoked by creating a Action button from the UI Extensions Editor and setting the Id as follows:
+These can be invoked by creating an Action button from the UI Extensions Editor and setting the Id as follows:
 - `test_survey` - Using sample call data, this will show the Survey on the Touch Panel
 - `test_services` - Using sample call and survey data, this will trigger processing the enabled services
 
