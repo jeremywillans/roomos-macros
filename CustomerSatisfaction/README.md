@@ -14,6 +14,12 @@ Does not require all questions to be completed for data to be captured, any data
 
 ![img1.png](img/img1.png)![img2.png](img/img2.png)
 
+## 🚨 Known Issues 🚨
+
+Due to current limitations in RoomOS 11, this macro will not currently capture results if the user does not select/submit each dialog box
+
+This macro is working successfully on RoomOS 10
+
 ## Prerequisites
 
 The following items are needed, depending on the enabled services.
