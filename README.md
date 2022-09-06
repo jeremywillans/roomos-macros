@@ -1,11 +1,12 @@
 # roomos-macros
 
-Macros for Webex RoomOS
+This repository contains example Webex RoomOS Macros
 
-- Zoom Controls
-- Customer Satisfaction
-- Ultrasound
+Each sub-directory represents a different example and contains its own README file for further information.
 
+## Support
+
+In case you've found a bug, please [open an issue on GitHub](../../issues).
 
 ## Disclaimer
 
