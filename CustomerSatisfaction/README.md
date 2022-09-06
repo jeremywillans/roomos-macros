@@ -42,10 +42,10 @@ The following items are needed, depending on the enabled services.
 **HTTP JSON**
 - A remote service capable of receiving HTTP POST messages.
 - (Example) [CSV Server](https://github.com/jeremywillans/csv-server) can be used to test receiving messages and storing them in a CSV File
-- The following format is used for the sent JSON Message
-    ```
-    { timestamp: 1662433280683, system: 'Test Endpoint', serial: 'FOC123456AA', software: 'ce10.19.1.1.cbd8b1e5d9e', rating: 'Average', destination: 'spark:123456789@webex.com', duration: 15, duration_fmt: '15 seconds',cause: 'LocalDisconnect', issue: 'Content/Sharing', feedback: 'Example feedback', reporter: 'user@example.com' }
-    ```
+- The following format is used for the JSON Message
+  ```
+  {"timestamp":1662433280683,"system":"Test_Endpoint","serial":"FOC123456AA","software":"ce10.19.1.1.cbd8b1e5d9e","rating":"Average","destination":"spark:123456789@webex.com","duration":15,"duration_fmt":"15 seconds","cause":"LocalDisconnect","issue":"Content/Sharing","feedback":"Example feedback","reporter":"user@example.com"}
+  ```
 
 ## Deployment
 
