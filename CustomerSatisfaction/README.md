@@ -1,5 +1,7 @@
 # Customer Satisfaction
 
+![RoomOS10-Yes](https://img.shields.io/badge/RoomOS%2010-Compatible-green.svg?style=for-the-badge&logo=cisco) ![RoomOS11-No](https://img.shields.io/badge/RoomOS%2011-Issues-red.svg?style=for-the-badge&logo=cisco)
+
 Macro for showing a Customer Satisfaction survey after each call.
 
 Allows data to be posted to a Webex Space, sent to a HTTP Server and/or an Incident raised in Service Now
