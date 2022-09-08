@@ -5,7 +5,7 @@
 # Customer Satisfaction Survey Macro
 # Written by Jeremy Willans
 # https://github.com/jeremywillans/roomos-macros
-# Version: 1.4
+# Version: 1.5
 #
 # USE AT OWN RISK, MACRO NOT FULLY TESTED NOR SUPPLIED WITH ANY GUARANTEE
 #
@@ -17,6 +17,7 @@
 # 1.2 20220524 Add HTTP JSON POST Option
 # 1.3 20220720 Add Timestamp to JSON Message
 # 1.4 20220906 Refactor Macro Code
+# 1.5 20220908 Add Loki Logging Support and further refactoring
 #
 */
 const xapi = require('xapi');
@@ -58,16 +59,10 @@ let errorResult = false;
 
 // Initialize Variables
 function initVariables() {
-  qualityInfo = {
-    rating: '',
-    issue: '',
-    feedback: '',
-    reporter: '',
-    incident: '',
-  };
+  qualityInfo = {};
   showFeedback = true;
   errorResult = false;
-  userInfo = { sys_id: '' };
+  userInfo = {};
 }
 
 // Sleep Function
@@ -94,34 +89,73 @@ function formatTime(seconds) {
   return `${dDisplay}${hDisplay}${mDisplay}`;
 }
 
+function formatRating(rating) {
+  switch (rating) {
+    case 1:
+      return 'Excellent';
+    case 2:
+      return 'Average';
+    case 3:
+      return 'Poor';
+    default:
+      return 'Unknown';
+  }
+}
+
+function formatLevel(rating) {
+  switch (rating) {
+    case 1:
+      return 'info';
+    case 2:
+      return 'warning';
+    case 3:
+      return 'error';
+    default:
+      return 'debug';
+  }
+}
+
+function formatIssue(issue) {
+  switch (issue) {
+    case 1:
+      return 'Audio/Video';
+    case 2:
+      return 'Content/Sharing';
+    case 3:
+      return 'Other';
+    default:
+      return 'Unknown';
+  }
+}
+
 // Post content to Webex Space
 async function postContent() {
   console.debug('Process postContent function');
   let blockquote;
   switch (qualityInfo.rating) {
-    case 'Excellent':
+    case 1:
       blockquote = '<blockquote class=success>';
       break;
-    case 'Average':
+    case 2:
       blockquote = '<blockquote class=warning>';
       break;
-    case 'Poor':
+    case 3:
       blockquote = '<blockquote class=danger>';
       break;
     default:
       console.debug('Unhandled Response');
   }
 
-  let markdown = (`**Call Quality Report - ${qualityInfo.rating}**${blockquote}**System Name:** ${systemInfo.systemName}  \n**Serial Number:** ${systemInfo.serialNumber}  \n**SW Release:** ${systemInfo.softwareVersion}`);
-  if (callInfo.RequestedURI !== '') { markdown += `\n**Dial String:** \`${callInfo.RequestedURI}\``; }
-  if (callInfo.Duration !== '') { markdown += `  \n**Call Duration:** ${formatTime(callInfo.Duration)}`; }
-  if (callInfo.CauseType !== '') { markdown += `  \n**Disconnect Cause:** ${callInfo.CauseType}`; }
-  if (qualityInfo.issue !== '') { markdown += `  \n**Quality Issue:** ${qualityInfo.issue}`; }
-  if (qualityInfo.feedback !== '') { markdown += `  \n**Quality Feedback:** ${qualityInfo.feedback}`; }
-  if (qualityInfo.incident !== '') { markdown += `  \n**Incident Ref:** ${qualityInfo.incident}`; }
-  if (userInfo.sys_id !== '') {
+  let markdown = (`**Call Quality Report - ${formatRating(qualityInfo.rating)}**${blockquote}**System Name:** ${systemInfo.systemName}  \n**Serial Number:** ${systemInfo.serialNumber}  \n**SW Release:** ${systemInfo.softwareVersion}`);
+  if (callInfo.RequestedURI) { markdown += `\n**Dial String:** \`${callInfo.RequestedURI}\``; }
+  if (callInfo.Duration) { markdown += `  \n**Call Duration:** ${formatTime(callInfo.Duration)}`; }
+  if (callInfo.CauseType) { markdown += `  \n**Disconnect Cause:** ${callInfo.CauseType}`; }
+  if (qualityInfo.issue) { markdown += `  \n**Quality Issue:** ${formatIssue(qualityInfo.issue)}`; }
+  if (qualityInfo.feedback) { markdown += `  \n**Quality Feedback:** ${qualityInfo.feedback}`; }
+  if (qualityInfo.incident) { markdown += `  \n**Incident Ref:** ${qualityInfo.incident}`; }
+  if (userInfo.sys_id) {
     markdown += `  \n**Reporter:**  [${userInfo.name}](webexteams://im?email=${userInfo.email}) (${userInfo.email})`;
-  } else if (qualityInfo.reporter !== '') {
+  } else if (qualityInfo.reporter) {
     // Include Provided Email if not matched in SNOW
     markdown += `  \n**Provided Email:** ${qualityInfo.reporter}`;
   }
@@ -135,6 +169,7 @@ async function postContent() {
       console.error(`postContent response: ${result}`);
       errorResult = true;
     }
+    console.debug('postContent message sent.');
   } catch (error) {
     console.error(`postContent error: ${error.message}`);
     errorResult = true;
@@ -151,6 +186,7 @@ async function postJSON() {
     serial: systemInfo.serialNumber,
     software: systemInfo.softwareVersion,
     rating: qualityInfo.rating,
+    rating_fmt: formatRating(qualityInfo.rating),
     destination: callInfo.RequestedURI,
     duration: callInfo.Duration,
     duration_fmt: formatTime(callInfo.Duration),
@@ -160,12 +196,15 @@ async function postJSON() {
     reporter: qualityInfo.reporter,
   };
 
+  if (qualityInfo.issue) messageContent.issue_fmt = formatIssue(qualityInfo.issue);
+
   if (HTTP_LOKI_SERVER) {
     messageContent = {
       streams: [
         {
           stream: {
             app: 'call-survey',
+            level: formatLevel(qualityInfo.rating),
           },
           values: [[`${timestamp}000000`, messageContent]],
         },
@@ -188,14 +227,14 @@ async function postJSON() {
 // Raise ticket in Service Now
 async function raiseTicket() {
   console.debug('Process raiseTicket function');
-  let description = `Call Quality Report - ${qualityInfo.rating}\n\nSystem Name: ${systemInfo.systemName}\nSerial Number: ${systemInfo.serialNumber}\nSW Release: ${systemInfo.softwareVersion}`;
-  if (callInfo.RequestedURI !== '') { description += `\n\nDial String: ${callInfo.RequestedURI}`; }
-  if (callInfo.Duration !== '') { description += `\nCall Duration:< ${formatTime(callInfo.Duration)}`; }
-  if (callInfo.CauseType !== '') { description += `\nDisconnect Cause: ${callInfo.CauseType}`; }
-  if (qualityInfo.issue !== '') { description += `\n\nQuality Issue: ${qualityInfo.issue}`; }
-  if (qualityInfo.feedback !== '') { description += `\nQuality Feedback: ${qualityInfo.feedback}`; }
+  let description = `Call Quality Report - ${formatRating(qualityInfo.rating)}\n\nSystem Name: ${systemInfo.systemName}\nSerial Number: ${systemInfo.serialNumber}\nSW Release: ${systemInfo.softwareVersion}`;
+  if (callInfo.RequestedURI) { description += `\n\nDial String: ${callInfo.RequestedURI}`; }
+  if (callInfo.Duration) { description += `\nCall Duration:< ${formatTime(callInfo.Duration)}`; }
+  if (callInfo.CauseType) { description += `\nDisconnect Cause: ${callInfo.CauseType}`; }
+  if (qualityInfo.issue) { description += `\n\nQuality Issue: ${formatIssue(qualityInfo.issue)}`; }
+  if (qualityInfo.feedback) { description += `\nQuality Feedback: ${qualityInfo.feedback}`; }
   const shortDescription = `${systemInfo.systemName}: ${qualityInfo.rating} Call Quality Report`;
-  if (qualityInfo.reporter !== '') {
+  if (qualityInfo.reporter) {
     try {
       let result = await xapi.command('HttpClient Get', { Header: [contentType, snowAuth], Url: `${snowUserUrl}?sysparm_limit=1&email=${qualityInfo.reporter}` });
       result = result.Body;
@@ -228,6 +267,7 @@ async function raiseTicket() {
     const incidentUrl = result.Headers.find((x) => x.Key === 'Location').Value;
     result = await xapi.command('HttpClient Get', { Header: [contentType, snowAuth], Url: incidentUrl });
     qualityInfo.incident = JSON.parse(result.Body).result.number;
+    console.debug(`raiseTicket successful: ${qualityInfo.incident}`);
   } catch (error) {
     console.error(`raiseTicket error: ${JSON.stringify(error)}`);
     errorResult = true;
@@ -236,7 +276,7 @@ async function raiseTicket() {
 
 // Initial Survey menu shown after call disconnect
 function initialMenu() {
-  const excellentText = EXCELLENT_DEFAULT ? 'Excellent (default)' : 'Excellent';
+  const excellentText = EXCELLENT_DEFAULT ? `${formatRating(1)} (default)` : formatRating(1);
   if (callInfo.Duration > CALL_DURATION) {
     xapi.command('UserInterface Message Prompt Display', {
       Duration: 20,
@@ -244,8 +284,8 @@ function initialMenu() {
       Text: 'How would you rate your call today?',
       FeedbackId: 'call_rating',
       'Option.1': excellentText,
-      'Option.2': 'Average',
-      'Option.3': 'Poor',
+      'Option.2': formatRating(2), // Average
+      'Option.3': formatRating(3), // Poor
     });
   } else {
     /*
@@ -266,7 +306,7 @@ async function processRequest() {
   if (HTTP_ENABLED) {
     postJSON();
   }
-  if (SERVICENOW_ENABLED && qualityInfo.rating !== 'Excellent') {
+  if (SERVICENOW_ENABLED && qualityInfo.rating !== 1) {
     await raiseTicket();
   }
   if (WEBEX_ENABLED) {
@@ -335,14 +375,14 @@ xapi.event.on('UserInterface Message Prompt Response', async (event) => {
     case 'call_rating':
       switch (event.OptionId) {
         case '1':
-          qualityInfo.rating = 'Excellent';
+          qualityInfo.rating = 1; // Excellent
           processRequest();
           return;
         case '2':
-          qualityInfo.rating = 'Average';
+          qualityInfo.rating = 2; // Average
           break;
         case '3':
-          qualityInfo.rating = 'Poor';
+          qualityInfo.rating = 3; // Poor
           break;
         default:
           console.debug('Unhandled Response');
@@ -354,23 +394,23 @@ xapi.event.on('UserInterface Message Prompt Response', async (event) => {
       xapi.command('UserInterface Message Prompt Display', {
         Duration: 20,
         Title: 'Call Experience Feedback',
-        Text: `What is the primary issue for your rating of ${qualityInfo.rating}?`,
+        Text: `What is the primary issue for your rating of ${formatRating(qualityInfo.rating)}?`,
         FeedbackId: 'feedback_step1',
-        'Option.1': 'Audio/Video',
-        'Option.2': 'Content/Sharing',
-        'Option.3': 'Other',
+        'Option.1': formatIssue(1), // Audio/Video
+        'Option.2': formatIssue(2), // Content/Sharing
+        'Option.3': formatIssue(3), // Other
       });
       break;
     case 'feedback_step1':
       switch (event.OptionId) {
         case '1':
-          qualityInfo.issue = 'Audio/Video';
+          qualityInfo.issue = 1; // Audio/Video
           break;
         case '2':
-          qualityInfo.issue = 'Content/Sharing';
+          qualityInfo.issue = 2; // Content/Sharing
           break;
         case '3':
-          qualityInfo.issue = 'Other';
+          qualityInfo.issue = 3; // Other
           break;
         default:
           console.debug('Unhandled Response');
@@ -427,7 +467,7 @@ xapi.event.on('UserInterface Message TextInput Clear', (event) => {
 // Debugging Buttons
 xapi.event.on('UserInterface Extensions Panel Clicked', (event) => {
   if (event.PanelId === 'test_services') {
-    qualityInfo.rating = 'Poor';
+    qualityInfo.rating = 3;
     qualityInfo.reporter = 'aileen.mottern@example.com';
     callInfo.Duration = 15;
     callInfo.RequestedURI = 'spark:123456789@webex.com';
