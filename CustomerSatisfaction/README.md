@@ -44,7 +44,7 @@ The following items are needed, depending on the enabled services.
 - (Example) [CSV Server](https://github.com/jeremywillans/csv-server) can be used to test receiving messages and storing them in a CSV File
 - The following format is used for the JSON Message
   ```
-  {"timestamp":1662433280683,"system":"Test_Endpoint","serial":"FOC123456AA","software":"ce10.19.1.1.cbd8b1e5d9e","rating":"Average","destination":"spark:123456789@webex.com","duration":15,"duration_fmt":"15 seconds","cause":"LocalDisconnect","issue":"Content/Sharing","feedback":"Example feedback","reporter":"user@example.com"}
+  {"timestamp":1662605028489,"system":"Test_Endpoint","serial":"FOC123456AA","software":"ce10.19.1.2.bb4292d4368","rating":2,"rating_fmt":"Average","destination":"spark:123456789@webex.com","duration": 15,"duration_fmt":"15 seconds","cause":"LocalDisconnect","issue":1,"issue_fmt":"Audio/Video","feedback":"Example feedback","reporter":"user@example.com"}
   ```
 
 ## Deployment
@@ -71,4 +71,4 @@ This macro is NOT guaranteed to be bug free and production quality.
 
 ## Credits
 
-- [CiscoDevNet](https://github.com/CiscoDevNet) for creating [oomdevices-macros-samples](https://github.com/CiscoDevNet/roomdevices-macros-samples) that this is based on!
+- [CiscoDevNet](https://github.com/CiscoDevNet) for creating [roomdevices-macros-samples](https://github.com/CiscoDevNet/roomdevices-macros-samples) that this is based on!
