@@ -27,8 +27,9 @@ const ROOM_ID = '#### ROOM ID ####'; // Specify a Room ID
 const BOT_ID = '#### BOT ID ####'; // Specify a Bot ID
 // HTTP JSON Post Parameters
 const HTTP_ENABLED = false; // Enable for JSON HTTP POST Destination
-const HTTP_URL = 'http://10.xx.xx.xx:3000'; // HTTP POST URL
+const HTTP_URL = 'http://10.xx.xx.xx:3000'; // HTTP POST URL (append /loki/api/v1/push if using Loki)
 const HTTP_AUTHORIZATION = 'supersecret123'; // Authorization Header Content for HTTP POST
+const HTTP_LOKI_SERVER = false; // Enable if destination server is Loki Log Server
 // Service Now Parameters
 const SERVICENOW_ENABLED = false; // Enable for Service NOW Incident Raise
 const SERVICE_NOW_INSTANCE = '#### INSTANCE ####.service-now.com'; // Specify a URL to a service like serviceNow etc.
@@ -143,8 +144,9 @@ async function postContent() {
 // Post JSON content to HTTP Server
 async function postJSON() {
   console.debug('Process postJSON function');
-  const messageContent = {
-    timestamp: Date.now(),
+  const timestamp = Date.now();
+  let messageContent = {
+    timestamp,
     system: systemInfo.systemName,
     serial: systemInfo.serialNumber,
     software: systemInfo.softwareVersion,
@@ -158,9 +160,22 @@ async function postJSON() {
     reporter: qualityInfo.reporter,
   };
 
+  if (HTTP_LOKI_SERVER) {
+    messageContent = {
+      streams: [
+        {
+          stream: {
+            app: 'call-survey',
+          },
+          values: [[`${timestamp}000000`, messageContent]],
+        },
+      ],
+    };
+  }
+
   try {
     const result = await xapi.command('HttpClient Post', { Header: [contentType, acceptType, httpAuth], Url: HTTP_URL }, JSON.stringify(messageContent));
-    if (result.StatusCode === '200') {
+    if (result.StatusCode.match(/20[04]/)) {
       console.debug('postJSON message sent.');
       return;
     }
