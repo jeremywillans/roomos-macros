@@ -5,7 +5,7 @@
 # Customer Satisfaction Survey Macro
 # Written by Jeremy Willans
 # https://github.com/jeremywillans/roomos-macros
-# Version: 1.5
+# Version: 1.6
 #
 # USE AT OWN RISK, MACRO NOT FULLY TESTED NOR SUPPLIED WITH ANY GUARANTEE
 #
@@ -18,6 +18,7 @@
 # 1.3 20220720 Add Timestamp to JSON Message
 # 1.4 20220906 Refactor Macro Code
 # 1.5 20220908 Add Loki Logging Support and further refactoring
+# 1.6 20221101 Fix to update Duration to Number
 #
 */
 const xapi = require('xapi');
@@ -340,6 +341,7 @@ async function processRequest() {
 // Process Call Disconnect event
 xapi.event.on('CallDisconnect', (event) => {
   callInfo = event;
+  callInfo.Duration = Number(event.Duration);
   initialMenu();
 });
 
