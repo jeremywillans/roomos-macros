@@ -1,13 +1,13 @@
 /* eslint-disable no-console */
 /*
-# VIMT Layouts Macro
+# VIMT Experience Macro
 # Written by Jeremy Willans
 # https://github.com/jeremywillans/roomos-macros
 # Version: 1.0
 #
 # USE AT OWN RISK, MACRO NOT FULLY TESTED NOR SUPPLIED WITH ANY GUARANTEE
 #
-# Usage - Update VIMT Meeting Layouts with Grid View and Hiding Non-Video Participants by Default
+# Usage - Update VIMT Meeting experience with Grid View and Hiding Non-Video Participants by Default
 #
 # Change History
 # 1.0 20230228 Initial Release
@@ -29,7 +29,7 @@ const debugMode = false; // Enable debug logging
 
 const vimtDomain = '@m.webex.com';
 const panelId = 'vimtToggle';
-const messageTitle = 'Meeting Updates';
+const messageTitle = 'VIMT Experience';
 let vimtSetup = false;
 let vimtActive = false;
 

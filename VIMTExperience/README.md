@@ -1,4 +1,4 @@
-# VIMTLayouts
+# VIMTExperience
 
 Macro for updating the default meeting experience when using VIMT
 
