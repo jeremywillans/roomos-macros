@@ -30,7 +30,8 @@ const debugMode = false; // Enable debug logging
 const vimtDomain = '@m.webex.com';
 const panelId = 'vimtToggle';
 const messageTitle = 'VIMT Optimizations';
-let vimtCall = false;
+let vimtSetup = false;
+let vimtActive = false;
 
 const sleep = (timeout) => new Promise((resolve) => {
   setTimeout(resolve, timeout);
@@ -152,10 +153,65 @@ function init() {
     if (debugMode) console.debug(call[0].CallbackNumber);
     if (call[0].CallbackNumber.match(vimtDomain)) {
       // Matched VIMT Call, update Global Variable
-      vimtCall = true;
-      if (debugMode) console.debug(`VIMT Call: ${vimtCall}`);
+      vimtSetup = true;
+      if (debugMode) console.debug(`VIMT Setup: ${vimtSetup}`);
+      const vimtRegex = new RegExp(`.*[0-9].*..*${vimtDomain}`);
+      if (call[0].CallbackNumber.match(vimtRegex)) {
+        vimtActive = true;
+        if (debugMode) console.debug(`VIMT Active: ${vimtActive}`);
+      }
     }
   });
+
+  async function performActions() {
+    // Successfully joined VIMT Call, perform optimizations
+    // Pause 1 second just to be sure
+    await sleep(1000);
+    const messageText = [];
+    // Grid Default
+    if (gridDefault) {
+      try {
+        await xapi.Command.Video.Layout.SetLayout({ LayoutName: 'Grid' });
+        messageText.push('Grid View Layout Enabled');
+      } catch (error) {
+        console.error('Unable to set Grid');
+        console.debug(error);
+      }
+    }
+    // Hide Non-Video Participants
+    if (hideNonVideo) {
+      try {
+        await sendDTMF('#5', 'Hide Non-Video was Pressed');
+        messageText.push('Non-Video Participants Hidden');
+      } catch (error) {
+        console.error('Unable to Hide Non-Video');
+        console.debug(error);
+      }
+    }
+    // Add Non-Video Participants Toggle
+    if (addNonVideoButton) {
+      try {
+        await addPanel();
+        messageText.push('Non-Video Toggle added to Controls');
+      } catch (error) {
+        console.error('Unable to add Panel');
+        console.debug(error);
+      }
+    }
+    // Display VIMT Message
+    if (showMessage && messageText.length > 0) {
+      try {
+        xapi.Command.UserInterface.Message.Alert.Display({
+          Title: messageTitle,
+          Text: messageText.join('<br>'),
+          Duration: messageTimeout,
+        });
+      } catch (error) {
+        console.error('Unable to display Alert message');
+        console.debug(error);
+      }
+    }
+  }
 
   xapi.Event.CallSuccessful.on(async () => {
     const call = await xapi.Status.Call.get();
@@ -163,54 +219,22 @@ function init() {
       // No Active Call
       return;
     }
-    const messageText = [];
-    if (vimtCall) {
-      // Successfully joined VIMT Call, perform optimizations
-      // Pause 1 second just to be sure
-      await sleep(1000);
-      // Grid Default
-      if (gridDefault) {
-        try {
-          await xapi.Command.Video.Layout.SetLayout({ LayoutName: 'Grid' });
-          messageText.push('Grid View Layout Enabled');
-        } catch (error) {
-          console.error('Unable to set Grid');
-          console.debug(error);
+    // Check if active VIMT Call
+    if (vimtActive) {
+      await performActions();
+      return;
+    }
+    // Check if VIMT Call setup (aka VTC Conference DTMF Menu)
+    if (vimtSetup) {
+      if (debugMode) console.debug('Pending Meeting Join');
+      // Wait for Participant Added Event which is triggered once Device is Admitted
+      xapi.Event.Conference.ParticipantList.ParticipantAdded.on(async () => {
+        if (vimtSetup && !vimtActive) {
+          vimtActive = true;
+          if (debugMode) console.debug(`VIMT Active: ${vimtActive}`);
+          performActions();
         }
-      }
-      // Hide Non-Video Participants
-      if (hideNonVideo) {
-        try {
-          await sendDTMF('#5', 'Hide Non-Video was Pressed');
-          messageText.push('Non-Video Participants Hidden');
-        } catch (error) {
-          console.error('Unable to Hide Non-Video');
-          console.debug(error);
-        }
-      }
-      // Add Non-Video Participants Toggle
-      if (addNonVideoButton) {
-        try {
-          await addPanel();
-          messageText.push('Non-Video Toggle added to Controls');
-        } catch (error) {
-          console.error('Unable to add Panel');
-          console.debug(error);
-        }
-      }
-      // Display VIMT Message
-      if (showMessage && messageText.length > 0) {
-        try {
-          xapi.Command.UserInterface.Message.Alert.Display({
-            Title: messageTitle,
-            Text: messageText.join('<br>'),
-            Duration: messageTimeout,
-          });
-        } catch (error) {
-          console.error('Unable to display Alert message');
-          console.debug(error);
-        }
-      }
+      });
     }
   });
 
@@ -218,9 +242,11 @@ function init() {
     // Call Disconnect detected, remove Panel
     if (debugMode) console.debug('Invoke Remove Panel');
     removePanel();
-    // Restore VIMT Call status
-    vimtCall = false;
-    if (debugMode) console.debug(`VIMT Call: ${vimtCall}`);
+    // Restore VIMT Global Variables
+    vimtSetup = false;
+    if (debugMode) console.debug(`VIMT Setup: ${vimtSetup}`);
+    vimtActive = false;
+    if (debugMode) console.debug(`VIMT Active: ${vimtActive}`);
   });
 }
 
