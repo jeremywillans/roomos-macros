@@ -1,13 +1,13 @@
 /* eslint-disable no-console */
 /*
-# VIMT Optimize Macro
+# VIMT Layouts Macro
 # Written by Jeremy Willans
 # https://github.com/jeremywillans/roomos-macros
 # Version: 1.0
 #
 # USE AT OWN RISK, MACRO NOT FULLY TESTED NOR SUPPLIED WITH ANY GUARANTEE
 #
-# Usage - Optimize VIMT Calls with Grid View and Hiding Non-Video Participants
+# Usage - Update VIMT Meeting Layouts with Grid View and Hiding Non-Video Participants by Default
 #
 # Change History
 # 1.0 20230228 Initial Release
@@ -29,7 +29,7 @@ const debugMode = false; // Enable debug logging
 
 const vimtDomain = '@m.webex.com';
 const panelId = 'vimtToggle';
-const messageTitle = 'VIMT Optimizations';
+const messageTitle = 'Meeting Updates';
 let vimtSetup = false;
 let vimtActive = false;
 
