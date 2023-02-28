@@ -7,7 +7,7 @@
 #
 # USE AT OWN RISK, MACRO NOT FULLY TESTED NOR SUPPLIED WITH ANY GUARANTEE
 #
-# Usage - Shows DTMF Controls Menu during Zoom Call and adds Join Zoom button to UI Controller
+# Usage - Optimize VIMT Calls with Grid View and Hiding Non-Video Participants
 #
 # Change History
 # 1.0 20230228 Initial Release
