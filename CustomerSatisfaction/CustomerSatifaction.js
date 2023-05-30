@@ -5,11 +5,14 @@
 # Customer Satisfaction Survey Macro
 # Written by Jeremy Willans
 # https://github.com/jeremywillans/roomos-macros
-# Version: 1.6
+# Version: 1.7
 #
 # USE AT OWN RISK, MACRO NOT FULLY TESTED NOR SUPPLIED WITH ANY GUARANTEE
 #
-# Usage - Shows Survey at end of call which output into Webex Space and/or Service Now Incident.
+# Usage -
+#  This macro will show a survey at the end of each call to capture user perception
+#  The data can be made available to the following destinations
+#  Webex Space, HTTP Server (POST) and/or Service Now Incident.
 #
 # Change History
 # 1.0 20210308 Initial Release
@@ -19,9 +22,10 @@
 # 1.4 20220906 Refactor Macro Code
 # 1.5 20220908 Add Loki Logging Support and further refactoring
 # 1.6 20221101 Fix to update Duration to Number
+# 1.7 20230530 Capture Voluntary Survey Response, add timeout vars and enable Log upload
 #
 */
-const xapi = require('xapi');
+import xapi from 'xapi';
 
 // Webex Space Parameters
 const WEBEX_ENABLED = false; // Enable for Webex Space Message Logging
@@ -39,6 +43,9 @@ const SERVICENOW_CREDENTIALS = '#### BASE64 CREDENTIALS ####'; // Basic Auth for
 // Global Parameters
 const CALL_DURATION = 10; // Minimum call duration (seconds) before Survey is displayed
 const EXCELLENT_DEFAULT = false; // Enable to send Excellent result as default if no user input.
+// Timeout Parameters
+const MENU_TIMEOUT = 20; // Timeout before initial survey menu is dismissed (seconds)
+const FOLLOWUP_TIMEOUT = 20; // Timeout before remaining survey options are dismissed (seconds)
 
 // ----- EDIT BELOW THIS LINE AT OWN RISK ----- //
 
@@ -56,13 +63,17 @@ const systemInfo = {};
 let userInfo = {};
 let qualityInfo = {};
 let showFeedback = true;
+let voluntaryRating = false;
 let errorResult = false;
+let skipLog = false;
 
 // Initialize Variables
 function initVariables() {
   qualityInfo = {};
   showFeedback = true;
+  voluntaryRating = false;
   errorResult = false;
+  skipLog = false;
   userInfo = {};
 }
 
@@ -153,6 +164,8 @@ async function postContent() {
   if (callInfo.CauseType) { markdown += `  \n**Disconnect Cause:** ${callInfo.CauseType}`; }
   if (qualityInfo.issue) { markdown += `  \n**Quality Issue:** ${formatIssue(qualityInfo.issue)}`; }
   if (qualityInfo.feedback) { markdown += `  \n**Quality Feedback:** ${qualityInfo.feedback}`; }
+  const voluntary = voluntaryRating ? 'Yes' : 'No';
+  markdown += `  \n**Voluntary Rating:** ${voluntary}`;
   if (qualityInfo.incident) { markdown += `  \n**Incident Ref:** ${qualityInfo.incident}`; }
   if (userInfo.sys_id) {
     markdown += `  \n**Reporter:**  [${userInfo.name}](webexteams://im?email=${userInfo.email}) (${userInfo.email})`;
@@ -195,6 +208,7 @@ async function postJSON() {
     issue: qualityInfo.issue,
     feedback: qualityInfo.feedback,
     reporter: qualityInfo.reporter,
+    voluntary: voluntaryRating,
   };
 
   if (qualityInfo.issue) messageContent.issue_fmt = formatIssue(qualityInfo.issue);
@@ -233,6 +247,8 @@ async function raiseTicket() {
   if (callInfo.Duration) { description += `\nCall Duration:< ${formatTime(callInfo.Duration)}`; }
   if (callInfo.CauseType) { description += `\nDisconnect Cause: ${callInfo.CauseType}`; }
   if (qualityInfo.issue) { description += `\n\nQuality Issue: ${formatIssue(qualityInfo.issue)}`; }
+  const voluntary = voluntaryRating ? 'Yes' : 'No';
+  description += `  \n**Voluntary Response:** ${voluntary}`;
   if (qualityInfo.feedback) { description += `\nQuality Feedback: ${qualityInfo.feedback}`; }
   const shortDescription = `${systemInfo.systemName}: ${qualityInfo.rating} Call Quality Report`;
   if (qualityInfo.reporter) {
@@ -280,7 +296,7 @@ function initialMenu() {
   const excellentText = EXCELLENT_DEFAULT ? `${formatRating(1)} (default)` : formatRating(1);
   if (callInfo.Duration > CALL_DURATION) {
     xapi.command('UserInterface Message Prompt Display', {
-      Duration: 20,
+      Duration: MENU_TIMEOUT,
       Title: 'Call Experience Feedback',
       Text: 'How would you rate your call today?',
       FeedbackId: 'call_rating',
@@ -352,7 +368,7 @@ xapi.event.on('UserInterface Message TextInput Response', async (event) => {
       qualityInfo.feedback = event.Text;
       await sleep(200);
       xapi.command('UserInterface Message TextInput Display', {
-        Duration: 20,
+        Duration: FOLLOWUP_TIMEOUT,
         FeedbackId: 'feedback_step3',
         InputType: 'SingleLine',
         KeyboardState: 'Open',
@@ -375,6 +391,7 @@ xapi.event.on('UserInterface Message TextInput Response', async (event) => {
 xapi.event.on('UserInterface Message Prompt Response', async (event) => {
   switch (event.FeedbackId) {
     case 'call_rating':
+      voluntaryRating = true;
       switch (event.OptionId) {
         case '1':
           qualityInfo.rating = 1; // Excellent
@@ -391,10 +408,10 @@ xapi.event.on('UserInterface Message Prompt Response', async (event) => {
           return;
       }
       // Send Logs for Average/Poor Ratings
-      // qualityInfo.logId = xapi.Command.Logging.SendLogs();
+      if (!skipLog) { xapi.Command.Logging.SendLogs(); }
       await sleep(200);
       xapi.command('UserInterface Message Prompt Display', {
-        Duration: 20,
+        Duration: FOLLOWUP_TIMEOUT,
         Title: 'Call Experience Feedback',
         Text: `What is the primary issue for your rating of ${formatRating(qualityInfo.rating)}?`,
         FeedbackId: 'feedback_step1',
@@ -420,7 +437,7 @@ xapi.event.on('UserInterface Message Prompt Response', async (event) => {
       }
       await sleep(200);
       xapi.command('UserInterface Message TextInput Display', {
-        Duration: 20,
+        Duration: FOLLOWUP_TIMEOUT,
         FeedbackId: 'feedback_step2',
         InputType: 'SingleLine',
         KeyboardState: 'Open',
@@ -441,7 +458,7 @@ xapi.event.on('UserInterface Message Prompt Cleared', (event) => {
   switch (event.FeedbackId) {
     case 'call_rating':
       if (EXCELLENT_DEFAULT) {
-        qualityInfo.rating = 'Excellent';
+        qualityInfo.rating = 1;
         processRequest();
       }
       return;
@@ -474,6 +491,8 @@ xapi.event.on('UserInterface Extensions Panel Clicked', (event) => {
     callInfo.Duration = 15;
     callInfo.RequestedURI = 'spark:123456789@webex.com';
     callInfo.CauseType = 'LocalDisconnect';
+    voluntaryRating = true;
+    skipLog = true;
     processRequest();
   }
   if (event.PanelId === 'test_survey') {
