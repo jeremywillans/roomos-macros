@@ -165,7 +165,7 @@ async function postContent() {
   if (qualityInfo.issue) { markdown += `  \n**Quality Issue:** ${formatIssue(qualityInfo.issue)}`; }
   if (qualityInfo.feedback) { markdown += `  \n**Quality Feedback:** ${qualityInfo.feedback}`; }
   const voluntary = voluntaryRating ? 'Yes' : 'No';
-  markdown += `  \n**Voluntary Rating:** ${voluntary}`;
+  if (EXCELLENT_DEFAULT) { markdown += `  \n**Voluntary Rating:** ${voluntary}`; }
   if (qualityInfo.incident) { markdown += `  \n**Incident Ref:** ${qualityInfo.incident}`; }
   if (userInfo.sys_id) {
     markdown += `  \n**Reporter:**  [${userInfo.name}](webexteams://im?email=${userInfo.email}) (${userInfo.email})`;
@@ -247,8 +247,6 @@ async function raiseTicket() {
   if (callInfo.Duration) { description += `\nCall Duration:< ${formatTime(callInfo.Duration)}`; }
   if (callInfo.CauseType) { description += `\nDisconnect Cause: ${callInfo.CauseType}`; }
   if (qualityInfo.issue) { description += `\n\nQuality Issue: ${formatIssue(qualityInfo.issue)}`; }
-  const voluntary = voluntaryRating ? 'Yes' : 'No';
-  description += `  \n**Voluntary Response:** ${voluntary}`;
   if (qualityInfo.feedback) { description += `\nQuality Feedback: ${qualityInfo.feedback}`; }
   const shortDescription = `${systemInfo.systemName}: ${qualityInfo.rating} Call Quality Report`;
   if (qualityInfo.reporter) {
