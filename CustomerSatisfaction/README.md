@@ -41,7 +41,11 @@ The following items are needed, depending on the enabled services.
   {"timestamp":1662605028489,"system":"Test_Endpoint","serial":"FOC123456AA","software":"ce10.19.1.2.bb4292d4368","rating":2,"rating_fmt":"Average","destination":"spark:123456789@webex.com","call_type":"webex","duration":15,"duration_fmt":"15 seconds","cause":"LocalDisconnect","issue":1,"issue_fmt":"Audio/Video","feedback":"Example feedback","reporter":"user@example.com","voluntary":true}
   ```
 
-Note: If enabling Power BI, the timestamp is updated to reflect DateTime format which is supported for the streaming dataset.
+  **Note:** If enabling the Power BI option, the timestamp (normally EPOC) is modified to the 'DateTime' format which is supported for the streaming dataset.
+
+  Example API Info for PowerBI
+  
+  ![powerbi.png](img/powerbi.png)
 
 ## Deployment
 
