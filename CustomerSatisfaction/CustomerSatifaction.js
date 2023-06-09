@@ -1,3 +1,4 @@
+/* eslint-disable no-useless-escape */
 /* eslint-disable import/no-unresolved */
 /* eslint-disable no-console */
 /* eslint-disable no-nested-ternary */
@@ -5,7 +6,7 @@
 # Customer Satisfaction Survey Macro
 # Written by Jeremy Willans
 # https://github.com/jeremywillans/roomos-macros
-# Version: 1.7
+# Version: 1.8
 #
 # USE AT OWN RISK, MACRO NOT FULLY TESTED NOR SUPPLIED WITH ANY GUARANTEE
 #
@@ -22,7 +23,8 @@
 # 1.4 20220906 Refactor Macro Code
 # 1.5 20220908 Add Loki Logging Support and further refactoring
 # 1.6 20221101 Fix to update Duration to Number
-# 1.7 20230530 Capture Voluntary Survey Response, add timeout vars and enable Log upload
+# 1.7 20230530 Capture Voluntary Survey Response and enable Log upload
+# 1.8 20230609 Add Meeting Type for each call and support PowerBI Streaming Dataset
 #
 */
 import xapi from 'xapi';
@@ -36,6 +38,7 @@ const HTTP_ENABLED = false; // Enable for JSON HTTP POST Destination
 const HTTP_URL = 'http://10.xx.xx.xx:3000'; // HTTP POST URL (append /loki/api/v1/push if using Loki)
 const HTTP_AUTHORIZATION = 'supersecret123'; // Authorization Header Content for HTTP POST
 const HTTP_LOKI_SERVER = false; // Enable if destination server is Loki Log Server
+const HTTP_POWER_BI = false; // Enable if destination service is Power BI Streaming Dataset
 // Service Now Parameters
 const SERVICENOW_ENABLED = false; // Enable for Service NOW Incident Raise
 const SERVICE_NOW_INSTANCE = '#### INSTANCE ####.service-now.com'; // Specify a URL to a service like serviceNow etc.
@@ -43,6 +46,7 @@ const SERVICENOW_CREDENTIALS = '#### BASE64 CREDENTIALS ####'; // Basic Auth for
 // Global Parameters
 const CALL_DURATION = 10; // Minimum call duration (seconds) before Survey is displayed
 const EXCELLENT_DEFAULT = false; // Enable to send Excellent result as default if no user input.
+const DEBUG_MODE = false; // Enable extended logging to debug console
 // Timeout Parameters
 const MENU_TIMEOUT = 20; // Timeout before initial survey menu is dismissed (seconds)
 const FOLLOWUP_TIMEOUT = 20; // Timeout before remaining survey options are dismissed (seconds)
@@ -57,6 +61,10 @@ const httpAuth = `Authorization: ${HTTP_AUTHORIZATION}`;
 const snowIncidentUrl = `https://${SERVICE_NOW_INSTANCE}/api/now/table/incident`; // Specify a URL to a service like serviceNow etc.
 const snowUserUrl = `https://${SERVICE_NOW_INSTANCE}/api/now/table/sys_user`; // Specify a URL to a service like serviceNow etc.
 const snowAuth = `Authorization: Basic ${SERVICENOW_CREDENTIALS}`; // SNOW PERMISSIONS NEEDED - sn_incident_write
+const vimtDomain = '@m.webex.com';
+const googleDomain = 'meet.google.com';
+const msftDomain = 'teams.microsoft.com';
+const zoomDomain = '(@zm..\.us|@zoomcrc.com)';
 
 let callInfo = {};
 const systemInfo = {};
@@ -66,6 +74,8 @@ let showFeedback = true;
 let voluntaryRating = false;
 let errorResult = false;
 let skipLog = false;
+let callDestination = false;
+let callType = '';
 
 // Initialize Variables
 function initVariables() {
@@ -75,6 +85,8 @@ function initVariables() {
   errorResult = false;
   skipLog = false;
   userInfo = {};
+  callDestination = false;
+  callType = '';
 }
 
 // Sleep Function
@@ -140,6 +152,27 @@ function formatIssue(issue) {
   }
 }
 
+function formatType(type) {
+  switch (type) {
+    case 'webex':
+      return 'Webex';
+    case 'endpoint':
+      return 'Device/User';
+    case 'vimt':
+      return 'Teams VIMT';
+    case 'msft':
+      return 'Teams WebRTC';
+    case 'google':
+      return 'Google WebRTC';
+    case 'zoom':
+      return 'Zoom WebRTC';
+    case 'crc':
+      return 'Zoom CRC';
+    default:
+      return 'Unknown';
+  }
+}
+
 // Post content to Webex Space
 async function postContent() {
   console.debug('Process postContent function');
@@ -159,7 +192,7 @@ async function postContent() {
   }
 
   let markdown = (`**Call Quality Report - ${formatRating(qualityInfo.rating)}**${blockquote}**System Name:** ${systemInfo.systemName}  \n**Serial Number:** ${systemInfo.serialNumber}  \n**SW Release:** ${systemInfo.softwareVersion}`);
-  if (callInfo.RequestedURI) { markdown += `\n**Dial String:** \`${callInfo.RequestedURI}\``; }
+  if (callDestination) { markdown += `\n**Destination:** \`${callDestination}\`  \n**Call Type:** ${formatType(callType)}`; }
   if (callInfo.Duration) { markdown += `  \n**Call Duration:** ${formatTime(callInfo.Duration)}`; }
   if (callInfo.CauseType) { markdown += `  \n**Disconnect Cause:** ${callInfo.CauseType}`; }
   if (qualityInfo.issue) { markdown += `  \n**Quality Issue:** ${formatIssue(qualityInfo.issue)}`; }
@@ -193,7 +226,11 @@ async function postContent() {
 // Post JSON content to HTTP Server
 async function postJSON() {
   console.debug('Process postJSON function');
-  const timestamp = Date.now();
+  let timestamp = Date.now();
+  if (HTTP_POWER_BI) {
+    const ts = new Date(timestamp);
+    timestamp = ts.toISOString();
+  }
   let messageContent = {
     timestamp,
     system: systemInfo.systemName,
@@ -201,7 +238,8 @@ async function postJSON() {
     software: systemInfo.softwareVersion,
     rating: qualityInfo.rating,
     rating_fmt: formatRating(qualityInfo.rating),
-    destination: callInfo.RequestedURI,
+    destination: callDestination,
+    call_type: callType,
     duration: callInfo.Duration,
     duration_fmt: formatTime(callInfo.Duration),
     cause: callInfo.CauseType,
@@ -227,6 +265,10 @@ async function postJSON() {
     };
   }
 
+  if (HTTP_POWER_BI) {
+    messageContent = [messageContent];
+  }
+
   try {
     const result = await xapi.command('HttpClient Post', { Header: [contentType, acceptType, httpAuth], Url: HTTP_URL }, JSON.stringify(messageContent));
     if (result.StatusCode.match(/20[04]/)) {
@@ -243,7 +285,7 @@ async function postJSON() {
 async function raiseTicket() {
   console.debug('Process raiseTicket function');
   let description = `Call Quality Report - ${formatRating(qualityInfo.rating)}\n\nSystem Name: ${systemInfo.systemName}\nSerial Number: ${systemInfo.serialNumber}\nSW Release: ${systemInfo.softwareVersion}`;
-  if (callInfo.RequestedURI) { description += `\n\nDial String: ${callInfo.RequestedURI}`; }
+  if (callDestination) { description += `\n**Destination:** \`${callDestination}\`  \n**Call Type:** ${formatType(callType)}`; }
   if (callInfo.Duration) { description += `\nCall Duration:< ${formatTime(callInfo.Duration)}`; }
   if (callInfo.CauseType) { description += `\nDisconnect Cause: ${callInfo.CauseType}`; }
   if (qualityInfo.issue) { description += `\n\nQuality Issue: ${formatIssue(qualityInfo.issue)}`; }
@@ -303,6 +345,7 @@ function initialMenu() {
       'Option.3': formatRating(3), // Poor
     });
   } else {
+    initVariables();
     /*
     xapi.command('UserInterface Message Prompt Display', {
       Title: 'Call Experience Feedback?',
@@ -353,10 +396,84 @@ async function processRequest() {
 }
 
 // Process Call Disconnect event
-xapi.event.on('CallDisconnect', (event) => {
+xapi.Event.CallDisconnect.on((event) => {
   callInfo = event;
   callInfo.Duration = Number(event.Duration);
   initialMenu();
+});
+
+xapi.Status.SystemUnit.State.NumberOfActiveCalls.on(async (numCalls) => {
+  // Capture WebRTC Calls
+  if (numCalls === '1' && !callDestination) {
+    let call;
+    try {
+      [call] = await xapi.Status.Call.get();
+    } catch (e) {
+      // No Active Call
+      return;
+    }
+    if (call.Protocol === 'WebRTC') {
+      callType = 'webrtc';
+      callDestination = call.CallbackNumber;
+      // Matched WebRTC Call
+      if (call.CallbackNumber.match(msftDomain)) {
+        // Matched Teams Call
+        callType = 'msft';
+        if (DEBUG_MODE) console.debug(`[${callType}] ${callDestination}`);
+        return;
+      }
+      if (call.CallbackNumber.match(googleDomain)) {
+        // Matched Google Call
+        callType = 'google';
+        if (DEBUG_MODE) console.debug(`[${callType}] ${callDestination}`);
+        return;
+      }
+      // Fallback WebRTC Call
+      if (DEBUG_MODE) console.debug(`[${callType}] ${callDestination}`);
+    }
+  }
+});
+
+// Capture Call Destination
+xapi.Event.OutgoingCallIndication.on(async () => {
+  let call;
+  try {
+    [call] = await xapi.Status.Call.get();
+  } catch (e) {
+    // No Active Call
+    return;
+  }
+  // Default Call Type
+  callType = 'sip';
+  callDestination = call.CallbackNumber;
+  if (call.CallbackNumber.match(vimtDomain)) {
+    // Matched VIMT Call
+    callType = 'vimt';
+    if (DEBUG_MODE) console.debug(`[${callType}] ${callDestination}`);
+    return;
+  }
+  if (call.CallbackNumber.match('.webex.com')) {
+    // Matched Webex Call
+    callType = 'webex';
+    if (DEBUG_MODE) console.debug(`[${callType}] ${callDestination}`);
+    return;
+  }
+  if (call.CallbackNumber.match(zoomDomain)) {
+    // Matched Zoom Call
+    callType = 'zoom';
+    if (DEBUG_MODE) console.debug(`[${callType}] ${callDestination}`);
+    return;
+  }
+  console.log(JSON.stringify(call));
+  if (call.DeviceType === 'Endpoint' && call.CallbackNumber.match('^[^.]*$')) {
+    // Matched Endpoint/User Call
+    callType = 'endpoint';
+    callDestination = `${call.DisplayName}: ${call.CallbackNumber})`;
+    if (DEBUG_MODE) console.debug(`[${callType}] ${callDestination}`);
+    return;
+  }
+  // Fallback SIP Call
+  if (DEBUG_MODE) console.debug(`[${callType}] ${callDestination}`);
 });
 
 // Process responses to TextInput prompts
@@ -458,6 +575,8 @@ xapi.event.on('UserInterface Message Prompt Cleared', (event) => {
       if (EXCELLENT_DEFAULT) {
         qualityInfo.rating = 1;
         processRequest();
+      } else {
+        initVariables();
       }
       return;
     case 'feedback_step1':
@@ -487,16 +606,18 @@ xapi.event.on('UserInterface Extensions Panel Clicked', (event) => {
     qualityInfo.rating = 3;
     qualityInfo.reporter = 'aileen.mottern@example.com';
     callInfo.Duration = 15;
-    callInfo.RequestedURI = 'spark:123456789@webex.com';
     callInfo.CauseType = 'LocalDisconnect';
+    callType = 'webex';
+    callDestination = 'spark:123456789@webex.com';
     voluntaryRating = true;
     skipLog = true;
     processRequest();
   }
   if (event.PanelId === 'test_survey') {
     callInfo.Duration = 15;
-    callInfo.RequestedURI = 'spark:123456789@webex.com';
     callInfo.CauseType = 'LocalDisconnect';
+    callType = 'webex';
+    callDestination = 'spark:123456789@webex.com';
     initialMenu();
   }
 });

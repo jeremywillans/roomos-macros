@@ -40,12 +40,14 @@ The following items are needed, depending on the enabled services.
 - Credentials for the above user account, encoded in Base64 in the following format `username:password`
 
 **HTTP JSON**
-- A remote service capable of receiving HTTP POST messages.
+- A remote service capable of receiving HTTP POST messages, including Power BI Streaming Dataset.
 - (Example) [CSV Server](https://github.com/jeremywillans/csv-server) can be used to test receiving messages and storing them in a CSV File
 - The following format is used for the JSON Message
   ```
-  {"timestamp":1662605028489,"system":"Test_Endpoint","serial":"FOC123456AA","software":"ce10.19.1.2.bb4292d4368","rating":2,"rating_fmt":"Average","destination":"spark:123456789@webex.com","duration":15,"duration_fmt":"15 seconds","cause":"LocalDisconnect","issue":1,"issue_fmt":"Audio/Video","feedback":"Example feedback","reporter":"user@example.com","voluntary":true}
+  {"timestamp":1662605028489,"system":"Test_Endpoint","serial":"FOC123456AA","software":"ce10.19.1.2.bb4292d4368","rating":2,"rating_fmt":"Average","destination":"spark:123456789@webex.com","call_type":"webex","duration":15,"duration_fmt":"15 seconds","cause":"LocalDisconnect","issue":1,"issue_fmt":"Audio/Video","feedback":"Example feedback","reporter":"user@example.com","voluntary":true}
   ```
+
+Note: If enabling Power BI, the timestamp is updated to reflect DateTime format which is supported for the streaming dataset.
 
 ## Deployment
 
