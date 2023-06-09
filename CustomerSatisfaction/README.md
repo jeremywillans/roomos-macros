@@ -1,6 +1,6 @@
 # Customer Satisfaction
 
-![RoomOS10-Yes](https://img.shields.io/badge/RoomOS%2010-Compatible-green.svg?style=for-the-badge&logo=cisco) ![RoomOS11-No](https://img.shields.io/badge/RoomOS%2011-Issues-red.svg?style=for-the-badge&logo=cisco)
+![RoomOS10-Yes](https://img.shields.io/badge/RoomOS%2010-Compatible-green.svg?style=for-the-badge&logo=cisco) ![RoomOS11-Yes](https://img.shields.io/badge/RoomOS%2011-Compatible-green.svg?style=for-the-badge&logo=cisco)
 
 Macro for showing a Customer Satisfaction survey after each call.
 
@@ -15,12 +15,6 @@ Provides 4 simple questions
 Does not require all questions to be completed for data to be captured, any data entered will be used for processing.
 
 ![img1.png](img/img1.png)![img2.png](img/img2.png)
-
-## 🚨 Known Issues 🚨
-
-Due to current limitations in RoomOS 11, this macro will not currently capture results if the user does not select/submit each dialog box
-
-This macro is working successfully on RoomOS 10
 
 ## Prerequisites
 
