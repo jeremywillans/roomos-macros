@@ -165,9 +165,7 @@ function formatType(type) {
     case 'google':
       return 'Google WebRTC';
     case 'zoom':
-      return 'Zoom WebRTC';
-    case 'crc':
-      return 'Zoom CRC';
+      return 'Zoom';
     default:
       return 'Unknown';
   }
