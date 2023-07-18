@@ -41,8 +41,14 @@ const HTTP_LOKI_SERVER = false; // Enable if destination server is Loki Log Serv
 const HTTP_POWER_BI = false; // Enable if destination service is Power BI Streaming Dataset
 // Service Now Parameters
 const SERVICENOW_ENABLED = false; // Enable for Service NOW Incident Raise
-const SERVICE_NOW_INSTANCE = '#### INSTANCE ####.service-now.com'; // Specify a URL to a service like serviceNow etc.
+const SERVICENOW_INSTANCE = '#### INSTANCE ####.service-now.com'; // Specify the base url for Service Now
 const SERVICENOW_CREDENTIALS = '#### BASE64 CREDENTIALS ####'; // Basic Auth format is "username:password" base64-encoded.
+const SERVICENOW_CALLER_ID = ''; // Default Caller for Incidents, needs to be sys_id of Caller
+const SERVICENOW_CMDB_CI = ''; // Default CMDB CI, needs to be sys_id of CI
+const SERVICENOW_CMDB_LOOKUP = false; // Lookup Device using Serial Number in Service Now
+const SERVICENOW_EXTRA = { // Any extra parameters to pass to Service Now
+  // "assignment_group": "sys_id-of-assignment-group"
+};
 // Global Parameters
 const CALL_DURATION = 10; // Minimum call duration (seconds) before Survey is displayed
 const EXCELLENT_DEFAULT = false; // Enable to send Excellent result as default if no user input.
@@ -58,8 +64,9 @@ const contentType = 'Content-Type: application/json';
 const acceptType = 'Accept: application/json';
 const webexMessageUrl = 'https://webexapis.com/v1/messages'; // Message URL
 const httpAuth = `Authorization: ${HTTP_AUTHORIZATION}`;
-const snowIncidentUrl = `https://${SERVICE_NOW_INSTANCE}/api/now/table/incident`; // Specify a URL to a service like serviceNow etc.
-const snowUserUrl = `https://${SERVICE_NOW_INSTANCE}/api/now/table/sys_user`; // Specify a URL to a service like serviceNow etc.
+const snowIncidentUrl = `https://${SERVICENOW_INSTANCE}/api/now/table/incident`; // Specify a URL to a service like serviceNow etc.
+const snowUserUrl = `https://${SERVICENOW_INSTANCE}/api/now/table/sys_user`; // Specify a URL to a service like serviceNow etc.
+const snowCMDBUrl = `https://${SERVICENOW_INSTANCE}/api/now/table/cmdb_ci`; // Specify a URL to a service like serviceNow etc.
 const snowAuth = `Authorization: Basic ${SERVICENOW_CREDENTIALS}`; // SNOW PERMISSIONS NEEDED - sn_incident_write
 const vimtDomain = '@m.webex.com';
 const googleDomain = 'meet.google.com';
@@ -283,38 +290,58 @@ async function postJSON() {
 async function raiseTicket() {
   console.debug('Process raiseTicket function');
   let description = `Call Quality Report - ${formatRating(qualityInfo.rating)}\n\nSystem Name: ${systemInfo.systemName}\nSerial Number: ${systemInfo.serialNumber}\nSW Release: ${systemInfo.softwareVersion}`;
-  if (callDestination) { description += `\n**Destination:** \`${callDestination}\`  \n**Call Type:** ${formatType(callType)}`; }
-  if (callInfo.Duration) { description += `\nCall Duration:< ${formatTime(callInfo.Duration)}`; }
+  if (callDestination) { description += `\nDestination: \`${callDestination}\`  \nCall Type: ${formatType(callType)}`; }
+  if (callInfo.Duration) { description += `\nCall Duration: ${formatTime(callInfo.Duration)}`; }
   if (callInfo.CauseType) { description += `\nDisconnect Cause: ${callInfo.CauseType}`; }
   if (qualityInfo.issue) { description += `\n\nQuality Issue: ${formatIssue(qualityInfo.issue)}`; }
   if (qualityInfo.feedback) { description += `\nQuality Feedback: ${qualityInfo.feedback}`; }
-  const shortDescription = `${systemInfo.systemName}: ${qualityInfo.rating} Call Quality Report`;
+  const shortDescription = `${systemInfo.systemName}: ${formatRating(qualityInfo.rating)} Call Quality Report`;
+
+  // Initial Construct Incident
+  let messageContent = { short_description: shortDescription, description };
+  // Add Default Caller, if defined.
+  if (SERVICENOW_CALLER_ID) {
+    messageContent.caller_id = SERVICENOW_CALLER_ID;
+  }
+
+  // SNOW Reporter Lookup, or append to description.
   if (qualityInfo.reporter) {
     try {
       let result = await xapi.command('HttpClient Get', { Header: [contentType, snowAuth], Url: `${snowUserUrl}?sysparm_limit=1&email=${qualityInfo.reporter}` });
       result = result.Body;
       [userInfo] = JSON.parse(result).result;
-      // Validate User Data, if invalid set to ''
-      if ((userInfo === undefined) || (!Number.isNaN(userInfo.sys_id))) {
-        userInfo = { sys_id: '' };
+      // Validate User Data
+      if ((userInfo !== undefined) || (userInfo.sys_id !== undefined)) {
+        messageContent.caller_id = userInfo.sys_id;
+      } else {
+        messageContent.description += `\nProvided Email Address: ${qualityInfo.reporter}}`;
       }
     } catch (error) {
       console.error(`raiseTicket getUser error: ${error.message}`);
-      userInfo = { sys_id: '' };
     }
   }
-  let messageContent;
-  if (userInfo.sys_id !== '') {
-    messageContent = {
-      caller_id: userInfo.sys_id,
-      short_description: shortDescription,
-      description,
-    };
-  } else {
-    if (qualityInfo.reporter !== '') {
-      description += `\nProvided Email Address: ${qualityInfo.reporter}`;
+
+  if (SERVICENOW_CMDB_CI) {
+    messageContent.cmdb_ci = SERVICENOW_CMDB_CI;
+  }
+
+  if (SERVICENOW_CMDB_LOOKUP) {
+    try {
+      let result = await xapi.command('HttpClient Get', { Header: [contentType, snowAuth], Url: `${snowCMDBUrl}?sysparm_limit=1&serial_number=${systemInfo.serialNumber}` });
+      result = result.Body;
+      const [ciInfo] = JSON.parse(result).result;
+      // Validate CI Data
+      if ((ciInfo !== undefined) && (ciInfo.sys_id !== undefined)) {
+        messageContent.cmdb_ci = ciInfo.sys_id;
+      }
+    } catch (error) {
+      console.error(`raiseTicket getCMDBCi error: ${error.message}`);
     }
-    messageContent = { short_description: shortDescription, description };
+  }
+
+  // Merge Extra Params
+  if (SERVICENOW_EXTRA) {
+    messageContent = { ...messageContent, ...SERVICENOW_EXTRA };
   }
 
   try {
