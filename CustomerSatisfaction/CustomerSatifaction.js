@@ -6,7 +6,7 @@
 # Customer Satisfaction Survey Macro
 # Written by Jeremy Willans
 # https://github.com/jeremywillans/roomos-macros
-# Version: 1.8
+# Version: 1.9
 #
 # USE AT OWN RISK, MACRO NOT FULLY TESTED NOR SUPPLIED WITH ANY GUARANTEE
 #
@@ -25,6 +25,7 @@
 # 1.6 20221101 Fix to update Duration to Number
 # 1.7 20230530 Capture Voluntary Survey Response and enable Log upload
 # 1.8 20230609 Add Meeting Type for each call and support PowerBI Streaming Dataset
+# 1.9 20230719 Improve Service Now customizations
 #
 */
 import xapi from 'xapi';
