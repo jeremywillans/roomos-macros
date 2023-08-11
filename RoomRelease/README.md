@@ -1,7 +1,5 @@
 # Room Release
 
-![RoomOS10-Yes](https://img.shields.io/badge/RoomOS%2010-Compatible-green.svg?style=for-the-badge&logo=cisco) ![RoomOS11-Yes](https://img.shields.io/badge/RoomOS%2011-Compatible-green.svg?style=for-the-badge&logo=cisco)
-
 Macro designed to automatically release a room booking based on occupancy metrics from the Cisco codec.
 
 The following metrics can be used for this calculation
