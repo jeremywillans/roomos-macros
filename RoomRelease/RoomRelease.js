@@ -4,7 +4,7 @@
 # Room Release Macro
 # Written by Jeremy Willans
 # https://github.com/jeremywillans/roomos-macros
-# Version: 1.0
+# Version: 1.1
 #
 # USE AT OWN RISK, MACRO NOT FULLY TESTED NOR SUPPLIED WITH ANY GUARANTEE
 #
@@ -14,16 +14,15 @@
 #
 # Change History
 # 1.0 20230811 Initial Release
+# 1.1 20230814 Revise Ultrasound detections
 #
 */
 // eslint-disable-next-line import/no-unresolved
 import xapi from 'xapi';
 
 // Occupancy Detections
-const usePresenceAndCount = false; // Requires presence *and* people count (eg. glass walls)
 const detectSound = false; // Use sound level to consider room occupied (set level below)
-const detectUltrasound = false; // Use Ultrasound for presence detection (eg. meeting rooms)
-const ultrasoundPresence = false; // Enable ultrasound attribute for people presence (default off)
+const detectUltrasound = false; // Use Ultrasound for presence detection (eg. glass walls)
 
 // Disable Occupancy Checks
 const buttonStopChecks = false; // Stop further occupancy checks after touch panel check in
@@ -119,34 +118,21 @@ async function configureCodec() {
   await xapi.Config.HttpClient.Mode.set('On');
   await xapi.Config.RoomAnalytics.PeopleCountOutOfCall.set('On');
   await xapi.Config.RoomAnalytics.PeoplePresenceDetector.set('On');
-
-  // Check and update PeoplePresence Ultrasound Config based on parameter
-  const ultrasound = await xapi.Config.RoomAnalytics.PeoplePresence.Input.Ultrasound.get();
-  if (ultrasoundPresence && ultrasound === 'Off') {
-    console.info('Enabling PeoplePresence Ultrasound...');
-    await xapi.Config.RoomAnalytics.PeoplePresence.Input.Ultrasound.set('On');
-  } else if (!ultrasoundPresence && ultrasound === 'On') {
-    console.info('Disabling PeoplePresence Ultrasound...');
-    await xapi.Config.RoomAnalytics.PeoplePresence.Input.Ultrasound.set('Off');
-  }
 }
 
 // Determine if room is occupied based on enabled detections
 function isRoomOccupied() {
   if (debugMode) {
-    console.debug(`People: ${metrics.peoplePresence} | Count: ${metrics.peopleCount} [${usePresenceAndCount ? 'Y' : 'N'}]\
-   | Ultrasound: ${metrics.ultrasound} [${detectUltrasound ? 'Y' : 'N'}] | In Call: ${metrics.inCall} [${detectActiveCalls ? 'Y' : 'N'}]\
-   | Sound (> ${soundLevel}): ${metrics.presenceSound} [${detectSound ? 'Y' : 'N'}] | Share: ${metrics.sharing} [${detectPresentation ? 'Y' : 'N'}]`);
+    console.debug(`Presence: ${metrics.peoplePresence} | [${detectUltrasound ? 'X' : ' '}] Ultrasound: ${metrics.ultrasound} \
+| [${detectActiveCalls ? 'X' : ' '}] In Call: ${metrics.inCall} | [${detectSound ? 'X' : ' '}] Sound (> ${soundLevel}): ${metrics.presenceSound} \
+| [${detectPresentation ? 'X' : ' '}] Share: ${metrics.sharing} `);
   }
-  let currentStatus = metrics.peoplePresence // People presence
+  const currentStatus = metrics.peoplePresence // People presence
     || (detectActiveCalls && metrics.inCall) // Active call detection
     || (detectSound && metrics.presenceSound) // Sound detection
     || (detectPresentation && metrics.sharing) // Presentation detection
     || (detectUltrasound && metrics.ultrasound); // Ultrasound detection
 
-  if (usePresenceAndCount) {
-    currentStatus = currentStatus || (metrics.peopleCount > 0); // People count detection
-  }
   if (debugMode) console.debug(`OCCUPIED: ${currentStatus}`);
   return currentStatus;
 }
