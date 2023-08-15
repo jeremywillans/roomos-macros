@@ -56,6 +56,7 @@ let alertInterval;
 let deleteTimeout;
 let periodicUpdate;
 let bookingIsActive = false;
+let countdownActive = false;
 let listenerShouldCheck = true;
 let roomIsEmpty = false;
 let lastFullTimestamp = 0;
@@ -112,6 +113,7 @@ function clearAlerts() {
   clearTimeout(deleteTimeout);
   clearInterval(alertInterval);
   roomIsEmpty = false;
+  countdownActive = false;
 }
 
 // Configure Cisco codec for occupancy metrics
@@ -142,6 +144,7 @@ function isRoomOccupied() {
 // Countdown timer before meeting decline
 function startCountdown() {
   if (debugMode) console.debug('Start countdown initiated');
+  countdownActive = true;
   promptUser();
 
   alertDuration = promptDuration;
@@ -219,8 +222,8 @@ function processOccupancy() {
     roomIsEmpty = true;
   }
 
-  // if room is considered empty commence countdown (unless there is an existing countdown in place)
-  if (roomIsEmpty && !alertInterval) {
+  // if room is considered empty commence countdown (unless already active)
+  if (roomIsEmpty && !countdownActive) {
     // check we have not yet reached the initial delay
     if (Date.now() < initialDelay) {
       if (debugMode) console.debug('Booking removal bypassed as meeting has not yet reached initial delay');
@@ -469,6 +472,9 @@ xapi.Event.PresentationPreviewStarted.on((result) => {
     if (debugMode) console.debug(`Presentation Started: ${result.LocalSource}`);
     metrics.sharing = detectPresentation;
 
+    if (detectPresentation) {
+      clearAlerts();
+    }
     if (listenerShouldCheck) {
       processOccupancy();
     }
@@ -481,6 +487,9 @@ xapi.Event.PresentationPreviewStopped.on((result) => {
     if (debugMode) console.debug(`Presentation Stopped: ${result.LocalSource}`);
     metrics.sharing = false;
 
+    if (detectPresentation) {
+      clearAlerts();
+    }
     if (listenerShouldCheck) {
       processOccupancy();
     }
