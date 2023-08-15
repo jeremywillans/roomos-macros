@@ -159,7 +159,9 @@ function startCountdown() {
     let booking;
     let bookingId;
     try {
+      // get webex booking id for current booking on codec
       bookingId = await xapi.Status.Bookings.Current.Id.get();
+      // use booking id to retrieve booking data, specifically meeting id
       booking = await xapi.Command.Bookings.Get({ Id: bookingId });
       if (debugMode) console.debug(`${bookingId} contains ${booking.Booking.MeetingId}`);
     } catch (error) {
@@ -167,6 +169,7 @@ function startCountdown() {
       console.debug(error);
     }
     try {
+      // attempt decline meeting to control hub
       await xapi.Command.Bookings.Respond({
         Type: 'Decline',
         MeetingId: booking.Booking.MeetingId,
@@ -216,7 +219,9 @@ function processOccupancy() {
     roomIsEmpty = true;
   }
 
+  // if room is considered empty commence countdown (unless there is an existing countdown in place)
   if (roomIsEmpty && !alertInterval) {
+    // check we have not yet reached the initial delay
     if (Date.now() < initialDelay) {
       if (debugMode) console.debug('Booking removal bypassed as meeting has not yet reached initial delay');
       return;
