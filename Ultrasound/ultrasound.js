@@ -1,8 +1,9 @@
+/* eslint-disable no-console */
 /*
 # Ultrasound Button Macro
 # Written by Jeremy Willans
 # https://github.com/jeremywillans/roomos-macros
-# Version: 1.0
+# Version: 1.1
 #
 # USE AT OWN RISK, MACRO NOT FULLY TESTED NOR SUPPLIED WITH ANY GUARANTEE
 #
@@ -10,38 +11,41 @@
 #
 # Change History
 # 1.0 20220616 Initial Release
+# 1.1 20230815 Refactor code
 #
 */
-import xapi from "xapi";
+// eslint-disable-next-line import/no-unresolved
+import xapi from 'xapi';
 
-const ULTRASOUND_ID = "ultrasound"; // Action Button Identifier
-const ULTRASOUND_VOLUME = 70; // Volume level to use when enabling
-const BUTTON_ENABLED = true; // Adds/Removes button from UI
+const panelId = 'ultrasound'; // Action Button Identifier
+const ultrasoundVolume = 70; // Volume level to use when enabling
+const buttonEnabled = true; // Adds / Removes button from UI
+const debugMode = true; // Enable debug logging
 
 async function addButton() {
   const config = await xapi.Command.UserInterface.Extensions.List();
   if (config.Extensions && config.Extensions.Panel) {
     const ultrasound = config.Extensions.Panel.find(
-      (panel) => panel.PanelId === ULTRASOUND_ID
+      (panel) => panel.PanelId === panelId,
     );
     if (ultrasound) {
-      console.debug("Ultrasound already added");
+      if (debugMode) console.debug('Ultrasound already added');
       return;
     }
   }
 
-  const result = await xapi.config.get("Audio Ultrasound MaxVolume");
-  let initialColor = "#30D557";
+  const result = await xapi.Config.Audio.Ultrasound.MaxVolume.get();
+  let initialColor = '#30D557';
   if (result === 0) {
-    initialColor = "#FF503C";
+    initialColor = '#FF503C';
   }
-  console.debug(`Adding Ultrasound`);
+  if (debugMode) console.debug('Adding Ultrasound');
   const xml = `<?xml version="1.0"?>
   <Extensions>
   <Version>1.8</Version>
   <Panel>
     <Order>1</Order>
-    <PanelId>${ULTRASOUND_ID}</PanelId>
+    <PanelId>${panelId}</PanelId>
     <Origin>local</Origin>
     <Type>Home</Type>
     <Icon>Proximity</Icon>
@@ -53,9 +57,9 @@ async function addButton() {
 
   await xapi.Command.UserInterface.Extensions.Panel.Save(
     {
-      PanelId: ULTRASOUND_ID,
+      PanelId: panelId,
     },
-    xml
+    xml,
   );
 }
 
@@ -63,41 +67,41 @@ async function removeButton() {
   const config = await xapi.Command.UserInterface.Extensions.List();
   if (config.Extensions && config.Extensions.Panel) {
     const panelExist = config.Extensions.Panel.find(
-      (panel) => panel.PanelId === ULTRASOUND_ID
+      (panel) => panel.PanelId === panelId,
     );
     if (!panelExist) {
-      console.debug("Ultrasound does not exist");
+      if (debugMode) console.debug('Ultrasound does not exist');
       return;
     }
   }
 
-  console.debug(`Removing Ultrasound`);
+  console.debug('Removing Ultrasound');
   await xapi.Command.UserInterface.Extensions.Panel.Close();
   await xapi.Command.UserInterface.Extensions.Panel.Remove({
-    PanelId: ULTRASOUND_ID,
+    PanelId: panelId,
   });
 }
 
 async function setButton(volume) {
-  if (volume === "0") {
+  if (volume === '0') {
     await xapi.Command.UserInterface.Extensions.Panel.Update({
-      PanelId: "ultrasound",
-      Color: "#FF503C",
+      PanelId: 'ultrasound',
+      Color: '#FF503C',
     });
-    console.info("Ultrasound Disabled");
+    if (debugMode) console.info('Ultrasound Disabled');
   } else {
     xapi.Command.UserInterface.Extensions.Panel.Update({
-      PanelId: "ultrasound",
-      Color: "#30D557",
+      PanelId: 'ultrasound',
+      Color: '#30D557',
     });
-    console.info("Ultrasound Enabled");
+    if (debugMode) console.info('Ultrasound Enabled');
   }
 }
 
 // Init function
 function init() {
   // Process Macro Status
-  if (BUTTON_ENABLED) {
+  if (buttonEnabled) {
     addButton();
   } else {
     removeButton();
@@ -109,18 +113,18 @@ function init() {
   });
 
   // Monitor for Panel Click Events
-  xapi.event.on("UserInterface Extensions Panel Clicked", async (event) => {
-    if (event.PanelId == "ultrasound") {
-      const result = await xapi.config.get("Audio Ultrasound MaxVolume");
-      if (result === "0") {
+  xapi.Event.UserInterface.Extensions.Panel.Clicked.on(async (event) => {
+    if (event.PanelId === 'ultrasound') {
+      const result = await xapi.Config.Audio.Ultrasound.MaxVolume.get();
+      if (result === '0') {
         // Enable Ultrasound
         await xapi.config.set(
-          "Audio Ultrasound MaxVolume:",
-          `${ULTRASOUND_VOLUME}`
+          'Audio Ultrasound MaxVolume:',
+          `${ultrasoundVolume}`,
         );
       } else {
         // Disable Ultrasound
-        await xapi.config.set("Audio Ultrasound MaxVolume:", "0");
+        await xapi.Config.Audio.Ultrasound.MaxVolume.set('0');
       }
     }
   });
