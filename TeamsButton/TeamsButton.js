@@ -99,7 +99,7 @@ async function addPanel() {
   <Extensions>
   <Version>1.10</Version>
   <Panel>
-    <Order>3</Order>
+    <Order>1</Order>
     <PanelId>${panelId}</PanelId>
     <Origin>local</Origin>
     <Location>HomeScreen</Location>
