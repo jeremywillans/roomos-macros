@@ -524,5 +524,4 @@ async function init() {
   }
 }
 
-// Commence init once runtime ready
-xapi.on('ready', () => setTimeout(init, 1000));
+init();
