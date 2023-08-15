@@ -12,7 +12,7 @@
 #
 # Change History
 # 1.0 20220623 Initial Release
-# 1.1 20220815 Refactor and add WebRTC capabilities
+# 1.1 20230815 Refactor and add WebRTC capabilities
 #
 */
 // eslint-disable-next-line import/no-unresolved
