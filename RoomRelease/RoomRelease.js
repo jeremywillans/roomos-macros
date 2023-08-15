@@ -58,8 +58,8 @@ let periodicUpdate;
 let bookingIsActive = false;
 let listenerShouldCheck = true;
 let roomIsEmpty = false;
-let lastFullTimer = 0;
-let lastEmptyTimer = 0;
+let lastFullTimestamp = 0;
+let lastEmptyTimestamp = 0;
 let initialDelay = 0;
 
 const metrics = {
@@ -177,8 +177,8 @@ function startCountdown() {
       console.debug(error);
     }
     bookingIsActive = false;
-    lastFullTimer = 0;
-    lastEmptyTimer = 0;
+    lastFullTimestamp = 0;
+    lastEmptyTimestamp = 0;
     roomIsEmpty = false;
   }, promptDuration * 1000);
 }
@@ -188,29 +188,30 @@ function processOccupancy() {
   // check is room occupied
   if (isRoomOccupied()) {
     // is room newly occupied
-    if (lastFullTimer === 0) {
-      if (debugMode) console.debug('Room occupancy detected - starting timer...');
-      lastFullTimer = Date.now();
-      lastEmptyTimer = 0;
+    if (lastFullTimestamp === 0) {
+      if (debugMode) console.debug('Room occupancy detected - updating full timestamp...');
+      lastFullTimestamp = Date.now();
+      lastEmptyTimestamp = 0;
     // has room been occupied longer than consideredOccupied
-    } else if (Date.now() > (lastFullTimer + (consideredOccupied * 60000))) {
+    } else if (Date.now() > (lastFullTimestamp + (consideredOccupied * 60000))) {
       if (debugMode) console.debug('consideredOccupied reached - room considered occupied');
       roomIsEmpty = false;
-      lastFullTimer = Date.now();
+      lastFullTimestamp = Date.now();
       if (occupiedStopChecks) {
         // stop further checks as room is considered occupied
         if (debugMode) console.debug('future checks stopped for this booking');
+        bookingIsActive = false;
         listenerShouldCheck = false;
         clearInterval(periodicUpdate);
       }
     }
   // is room newly empty
-  } else if (lastEmptyTimer === 0) {
-    if (debugMode) console.debug('Room empty detected - starting timer...');
-    lastEmptyTimer = Date.now();
-    lastFullTimer = 0;
+  } else if (lastEmptyTimestamp === 0) {
+    if (debugMode) console.debug('Room empty detected - updating empty timestamp...');
+    lastEmptyTimestamp = Date.now();
+    lastFullTimestamp = 0;
   // has room been empty longer than emptyBeforeRelease
-  } else if (Date.now() > (lastEmptyTimer + (emptyBeforeRelease * 60000)) && !roomIsEmpty) {
+  } else if (Date.now() > (lastEmptyTimestamp + (emptyBeforeRelease * 60000)) && !roomIsEmpty) {
     if (debugMode) console.debug('emptyBeforeRelease reached - room considered empty');
     roomIsEmpty = true;
   }
@@ -326,8 +327,8 @@ async function processBooking(id) {
     }, (periodicInterval * 60000) + 1000);
   } else {
     initialDelay = 0;
-    lastFullTimer = 0;
-    lastEmptyTimer = 0;
+    lastFullTimestamp = 0;
+    lastEmptyTimestamp = 0;
     roomIsEmpty = false;
     console.warn('Booking was detected without end time!');
   }
@@ -338,12 +339,13 @@ xapi.Event.UserInterface.Message.Prompt.Response.on((event) => {
   if (event.FeedbackId === feedbackId && event.OptionId === '1') {
     if (debugMode) console.debug('Local Check-in performed from Touch Panel');
     clearAlerts();
-    lastFullTimer = Date.now();
-    lastEmptyTimer = 0;
+    lastFullTimestamp = Date.now();
+    lastEmptyTimestamp = 0;
     if (buttonStopChecks) {
       if (debugMode) console.debug('future checks stopped for this booking');
-      clearInterval(periodicUpdate);
+      bookingIsActive = false;
       listenerShouldCheck = false;
+      clearInterval(periodicUpdate);
     }
   }
 });
@@ -369,8 +371,8 @@ xapi.Event.Bookings.End.on((event) => {
   bookingIsActive = false;
   listenerShouldCheck = false;
   initialDelay = 0;
-  lastFullTimer = 0;
-  lastEmptyTimer = 0;
+  lastFullTimestamp = 0;
+  lastEmptyTimestamp = 0;
   console.log(`Booking ${event.Id} ended Stop Checking`);
 });
 
@@ -486,8 +488,8 @@ xapi.Event.UserInterface.Extensions.on(() => {
     if (debugMode) console.debug('UI interaction detected');
 
     clearAlerts();
-    lastFullTimer = Date.now();
-    lastEmptyTimer = 0;
+    lastFullTimestamp = Date.now();
+    lastEmptyTimestamp = 0;
 
     if (listenerShouldCheck) {
       processOccupancy();

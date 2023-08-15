@@ -13,16 +13,30 @@ The following metrics can be used for this calculation
 If the room is unable to detect presence this macro will wait 5 minutes before declaring the room unoccupied, and will present a dialog on the Touch Panel to initiate a Check In.
 This prompt, along with playing an announcement tone, will display for 60 seconds before the booking will be declined and removed from the device.
 
+Note: there is new a new parameter (`initialReleaseDelay`) allowing you to define an initial delay (from booking start) before invoking the countdown and releasing the room.
+
 Additionally, there is built in functionality to ignore the release of larger bookings (duration adjustable), such as all day events which may not start on time.
 
 Example Screenshots - 
 ![img1.png](img/touch.png)
 ![img2.png](img/osd.png)
 
-## Notes
-- All default threshold timers are configurable in the parameters.
-- By default, once the user has pressed the `Check In` button, room occupancy checks will continue. These can stopped by enabling the `buttonStopChecks` parameter.
-- Parameter `occupiedStopChecks` can be enabled to stop room occupancy checks after the `minBeforeOccupied` threshold timer is reached.
+# Process Flow
+- Booking start time is reached or macro is restarted (and there is an active booking)
+- The meeting is processed to determine duration, calculate the initial delay and is marked as active.
+- If the meeting is longer than `ignoreLongerThan` duration, booking is marked inactive and no further action is taken.
+- Initial occupancy data is retrieved from the Codec and processed to determine current room status. 
+- Based on occupied/empty status from the processing of metrics, the appropriate timestamp (last empty or full) is recorded which will are used to track room status
+- Once a booking is marked active, the subscriptions for occupancy metrics are processed when there are changes detected (presence, sound, active call, etc.)
+- When metrics changes are detected, the value for the affected metric is updated. If the metric is enabled, then the occupancy metrics are reprocessed.
+- To ensure accurate occupancy and timestamps are kept, at the `periodicInterval`, new occupancy metrics are retrieved from the device and reprocessed.
+- If the room is considered empty (which is determined by the current timestamp exceeding the last empty timestamp combined with the value of `emptyBeforeRelease`) and the `initialReleaseDelay` time is met/exceeded, a countdown will be displayed on screen prompting a 'Check In'. this will be displayed for the length specified in `promptDuration`.
+An announcement tone will also be played if `playAnnouncement` is enabled (default true).
+- If pressed, the room full timestamp will be updated with the current time, and checks will continue. If `buttonStopChecks` is enabled, booking is marked inactive and no further action is taken.
+- If the check in button is not pressed, and no occupancy changes are detected in the room, the booking will be declined and removed from the calendar.
+- If the room is considered full (which is determined by the current time exceeding the last full timestamp combined with the value of `consideredOccupied`) and `occupiedStopChecks` is enabled (default false), booking is marked inactive and no further action is taken.
+- Occupancy metrics will be continually processed by either status changes in the room, or based on the `periodicInterval` timer.
+- Once the booking ends, it will be marked inactive and checks/updates will stop until the next meeting.
 
 ## Deployment
 
