@@ -3,7 +3,7 @@
 Macro designed to automatically release a room booking based on occupancy metrics from the Cisco codec.
 
 The following metrics can be used for this calculation
-- People Count (Head Detection)
+- People Presence (Head Detection)
 - Room Ultrasound
 - Sound Levels
 - Active Call
