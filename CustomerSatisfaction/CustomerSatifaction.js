@@ -1,12 +1,11 @@
 /* eslint-disable no-useless-escape */
-/* eslint-disable import/no-unresolved */
 /* eslint-disable no-console */
 /* eslint-disable no-nested-ternary */
 /*
 # Customer Satisfaction Survey Macro
 # Written by Jeremy Willans
 # https://github.com/jeremywillans/roomos-macros
-# Version: 1.9
+# Version: 2.0
 #
 # USE AT OWN RISK, MACRO NOT FULLY TESTED NOR SUPPLIED WITH ANY GUARANTEE
 #
@@ -26,49 +25,53 @@
 # 1.7 20230530 Capture Voluntary Survey Response and enable Log upload
 # 1.8 20230609 Add Meeting Type for each call and support PowerBI Streaming Dataset
 # 1.9 20230719 Improve Service Now customizations
+# 2.0 20230817 Refactoring and allow customizing SNOW Tickets raised for Poor and/or Average
 #
 */
+// eslint-disable-next-line import/no-unresolved
 import xapi from 'xapi';
 
 // Webex Space Parameters
-const WEBEX_ENABLED = false; // Enable for Webex Space Message Logging
-const ROOM_ID = '#### ROOM ID ####'; // Specify a Room ID
-const BOT_ID = '#### BOT ID ####'; // Specify a Bot ID
+const webexEnabled = false; // Enable for Webex Space Message Logging
+const roomId = '#### ROOM ID ####'; // Specify a Room ID
+const botId = '#### BOT ID ####'; // Specify a Bot ID
 // HTTP JSON Post Parameters
-const HTTP_ENABLED = false; // Enable for JSON HTTP POST Destination
-const HTTP_URL = 'http://10.xx.xx.xx:3000'; // HTTP POST URL (append /loki/api/v1/push if using Loki)
-const HTTP_AUTHORIZATION = 'supersecret123'; // Authorization Header Content for HTTP POST
-const HTTP_LOKI_SERVER = false; // Enable if destination server is Loki Log Server
-const HTTP_POWER_BI = false; // Enable if destination service is Power BI Streaming Dataset
+const httpEnabled = false; // Enable for JSON HTTP POST Destination
+const httpUrl = 'http://10.xx.xx.xx:3000'; // HTTP POST URL (append /loki/api/v1/push if using Loki)
+const httpAuthorization = 'supersecret123'; // Authorization Header Content for HTTP POST
+const httpLoki = false; // Enable if destination server is Loki Log Server
+const httpPowerBi = false; // Enable if destination service is Power BI Streaming Dataset
 // Service Now Parameters
-const SERVICENOW_ENABLED = false; // Enable for Service NOW Incident Raise
-const SERVICENOW_INSTANCE = '#### INSTANCE ####.service-now.com'; // Specify the base url for Service Now
-const SERVICENOW_CREDENTIALS = '#### BASE64 CREDENTIALS ####'; // Basic Auth format is "username:password" base64-encoded.
-const SERVICENOW_CALLER_ID = ''; // Default Caller for Incidents, needs to be sys_id of Caller
-const SERVICENOW_CMDB_CI = ''; // Default CMDB CI, needs to be sys_id of CI
-const SERVICENOW_CMDB_LOOKUP = false; // Lookup Device using Serial Number in Service Now
-const SERVICENOW_EXTRA = { // Any extra parameters to pass to Service Now
+const snowEnabled = false; // Enable for Service NOW Incident Raise
+const snowRaiseAvg = true; // Raise SNOW Incident for Average Responses
+const snowInstance = '#### INSTANCE ####.service-now.com'; // Specify the base url for Service Now
+const snowCredentials = '#### BASE64 CREDENTIALS ####'; // Basic Auth format is "username:password" base64-encoded.
+const snowCallerId = ''; // Default Caller for Incidents, needs to be sys_id of Caller
+const snowCmdbCi = ''; // Default CMDB CI, needs to be sys_id of CI
+const snowCmdbLookup = false; // Lookup Device using Serial Number in Service Now
+const snowExtra = { // Any extra parameters to pass to Service Now
   // "assignment_group": "sys_id-of-assignment-group"
 };
 // Global Parameters
-const CALL_DURATION = 10; // Minimum call duration (seconds) before Survey is displayed
-const EXCELLENT_DEFAULT = false; // Enable to send Excellent result as default if no user input.
-const DEBUG_MODE = false; // Enable extended logging to debug console
+const minDuration = 10; // Minimum call duration (seconds) before Survey is displayed
+const defaultExcellent = false; // Enable to send Excellent result as default if no user input.
+const promptTitle = 'Call Experience Feedback'; // Title shown on displayed prompts.
+const debugMode = true; // Enable extended logging to debug console
 // Timeout Parameters
-const MENU_TIMEOUT = 20; // Timeout before initial survey menu is dismissed (seconds)
-const FOLLOWUP_TIMEOUT = 20; // Timeout before remaining survey options are dismissed (seconds)
+const timeoutMenu = 20; // Timeout before initial survey menu is dismissed (seconds)
+const timeoutFollowup = 20; // Timeout before remaining survey options are dismissed (seconds)
 
 // ----- EDIT BELOW THIS LINE AT OWN RISK ----- //
 
-const webexAuth = `Authorization: Bearer ${BOT_ID}`;
+const webexAuth = `Authorization: Bearer ${botId}`;
 const contentType = 'Content-Type: application/json';
 const acceptType = 'Accept: application/json';
 const webexMessageUrl = 'https://webexapis.com/v1/messages'; // Message URL
-const httpAuth = `Authorization: ${HTTP_AUTHORIZATION}`;
-const snowIncidentUrl = `https://${SERVICENOW_INSTANCE}/api/now/table/incident`; // Specify a URL to a service like serviceNow etc.
-const snowUserUrl = `https://${SERVICENOW_INSTANCE}/api/now/table/sys_user`; // Specify a URL to a service like serviceNow etc.
-const snowCMDBUrl = `https://${SERVICENOW_INSTANCE}/api/now/table/cmdb_ci`; // Specify a URL to a service like serviceNow etc.
-const snowAuth = `Authorization: Basic ${SERVICENOW_CREDENTIALS}`; // SNOW PERMISSIONS NEEDED - sn_incident_write
+const httpAuth = `Authorization: ${httpAuthorization}`;
+const snowIncidentUrl = `https://${snowInstance}/api/now/table/incident`; // Specify a URL to a service like serviceNow etc.
+const snowUserUrl = `https://${snowInstance}/api/now/table/sys_user`; // Specify a URL to a service like serviceNow etc.
+const snowCMDBUrl = `https://${snowInstance}/api/now/table/cmdb_ci`; // Specify a URL to a service like serviceNow etc.
+const snowAuth = `Authorization: Basic ${snowCredentials}`; // SNOW PERMISSIONS NEEDED - sn_incident_write
 const vimtDomain = '@m.webex.com';
 const googleDomain = 'meet.google.com';
 const msftDomain = 'teams.microsoft.com';
@@ -84,6 +87,7 @@ let errorResult = false;
 let skipLog = false;
 let callDestination = false;
 let callType = '';
+let callMatched = false;
 
 // Initialize Variables
 function initVariables() {
@@ -95,6 +99,7 @@ function initVariables() {
   userInfo = {};
   callDestination = false;
   callType = '';
+  callMatched = false;
 }
 
 // Sleep Function
@@ -181,7 +186,7 @@ function formatType(type) {
 
 // Post content to Webex Space
 async function postContent() {
-  console.debug('Process postContent function');
+  if (debugMode) console.debug('Process postContent function');
   let blockquote;
   switch (qualityInfo.rating) {
     case 1:
@@ -204,7 +209,7 @@ async function postContent() {
   if (qualityInfo.issue) { markdown += `  \n**Quality Issue:** ${formatIssue(qualityInfo.issue)}`; }
   if (qualityInfo.feedback) { markdown += `  \n**Quality Feedback:** ${qualityInfo.feedback}`; }
   const voluntary = voluntaryRating ? 'Yes' : 'No';
-  if (EXCELLENT_DEFAULT) { markdown += `  \n**Voluntary Rating:** ${voluntary}`; }
+  if (defaultExcellent) { markdown += `  \n**Voluntary Rating:** ${voluntary}`; }
   if (qualityInfo.incident) { markdown += `  \n**Incident Ref:** ${qualityInfo.incident}`; }
   if (userInfo.sys_id) {
     markdown += `  \n**Reporter:**  [${userInfo.name}](webexteams://im?email=${userInfo.email}) (${userInfo.email})`;
@@ -214,7 +219,7 @@ async function postContent() {
   }
   markdown += '</blockquote>';
 
-  const messageContent = { roomId: ROOM_ID, markdown };
+  const messageContent = { roomId, markdown };
 
   try {
     const result = await xapi.command('HttpClient Post', { Header: [contentType, acceptType, webexAuth], Url: webexMessageUrl }, JSON.stringify(messageContent));
@@ -233,7 +238,7 @@ async function postContent() {
 async function postJSON() {
   console.debug('Process postJSON function');
   let timestamp = Date.now();
-  if (HTTP_POWER_BI) {
+  if (httpPowerBi) {
     const ts = new Date(timestamp);
     timestamp = ts.toISOString();
   }
@@ -257,7 +262,7 @@ async function postJSON() {
 
   if (qualityInfo.issue) messageContent.issue_fmt = formatIssue(qualityInfo.issue);
 
-  if (HTTP_LOKI_SERVER) {
+  if (httpLoki) {
     messageContent = {
       streams: [
         {
@@ -271,25 +276,29 @@ async function postJSON() {
     };
   }
 
-  if (HTTP_POWER_BI) {
+  if (httpPowerBi) {
     messageContent = [messageContent];
   }
 
   try {
-    const result = await xapi.command('HttpClient Post', { Header: [contentType, acceptType, httpAuth], Url: HTTP_URL }, JSON.stringify(messageContent));
+    const result = await xapi.command('HttpClient Post', { Header: [contentType, acceptType, httpAuth], Url: httpUrl }, JSON.stringify(messageContent));
     if (result.StatusCode.match(/20[04]/)) {
-      console.debug('postJSON message sent.');
+      if (debugMode) console.debug('postJSON message sent.');
       return;
     }
     console.error(`postJSON status: ${result.StatusCode}`);
+    if (result.message && debugMode) {
+      console.debug(result.message);
+    }
   } catch (error) {
-    console.error(`postJSON error: ${error.message}`);
+    console.error('postJSON error encountered');
+    if (debugMode) console.debug(error.message);
   }
 }
 
 // Raise ticket in Service Now
 async function raiseTicket() {
-  console.debug('Process raiseTicket function');
+  if (debugMode) console.debug('Process raiseTicket function');
   let description = `Call Quality Report - ${formatRating(qualityInfo.rating)}\n\nSystem Name: ${systemInfo.systemName}\nSerial Number: ${systemInfo.serialNumber}\nSW Release: ${systemInfo.softwareVersion}`;
   if (callDestination) { description += `\nDestination: \`${callDestination}\`  \nCall Type: ${formatType(callType)}`; }
   if (callInfo.Duration) { description += `\nCall Duration: ${formatTime(callInfo.Duration)}`; }
@@ -301,8 +310,8 @@ async function raiseTicket() {
   // Initial Construct Incident
   let messageContent = { short_description: shortDescription, description };
   // Add Default Caller, if defined.
-  if (SERVICENOW_CALLER_ID) {
-    messageContent.caller_id = SERVICENOW_CALLER_ID;
+  if (snowCallerId) {
+    messageContent.caller_id = snowCallerId;
   }
 
   // SNOW Reporter Lookup, or append to description.
@@ -318,15 +327,16 @@ async function raiseTicket() {
         messageContent.description += `\nProvided Email Address: ${qualityInfo.reporter}}`;
       }
     } catch (error) {
-      console.error(`raiseTicket getUser error: ${error.message}`);
+      console.error('raiseTicket getUser error encountered');
+      if (debugMode) console.debug(error.message);
     }
   }
 
-  if (SERVICENOW_CMDB_CI) {
-    messageContent.cmdb_ci = SERVICENOW_CMDB_CI;
+  if (snowCmdbCi) {
+    messageContent.cmdb_ci = snowCmdbCi;
   }
 
-  if (SERVICENOW_CMDB_LOOKUP) {
+  if (snowCmdbLookup) {
     try {
       let result = await xapi.command('HttpClient Get', { Header: [contentType, snowAuth], Url: `${snowCMDBUrl}?sysparm_limit=1&serial_number=${systemInfo.serialNumber}` });
       result = result.Body;
@@ -336,13 +346,14 @@ async function raiseTicket() {
         messageContent.cmdb_ci = ciInfo.sys_id;
       }
     } catch (error) {
-      console.error(`raiseTicket getCMDBCi error: ${error.message}`);
+      console.error('raiseTicket getCMDBCi error encountered');
+      if (debugMode) console.debug(error.message);
     }
   }
 
   // Merge Extra Params
-  if (SERVICENOW_EXTRA) {
-    messageContent = { ...messageContent, ...SERVICENOW_EXTRA };
+  if (snowExtra) {
+    messageContent = { ...messageContent, ...snowExtra };
   }
 
   try {
@@ -350,20 +361,21 @@ async function raiseTicket() {
     const incidentUrl = result.Headers.find((x) => x.Key === 'Location').Value;
     result = await xapi.command('HttpClient Get', { Header: [contentType, snowAuth], Url: incidentUrl });
     qualityInfo.incident = JSON.parse(result.Body).result.number;
-    console.debug(`raiseTicket successful: ${qualityInfo.incident}`);
+    if (debugMode) console.debug(`raiseTicket successful: ${qualityInfo.incident}`);
   } catch (error) {
-    console.error(`raiseTicket error: ${JSON.stringify(error)}`);
+    console.error('raiseTicket error encountered');
+    if (debugMode) console.debug(JSON.stringify(error));
     errorResult = true;
   }
 }
 
 // Initial Survey menu shown after call disconnect
 function initialMenu() {
-  const excellentText = EXCELLENT_DEFAULT ? `${formatRating(1)} (default)` : formatRating(1);
-  if (callInfo.Duration > CALL_DURATION) {
+  const excellentText = defaultExcellent ? `${formatRating(1)} (default)` : formatRating(1);
+  if (callInfo.Duration > minDuration) {
     xapi.command('UserInterface Message Prompt Display', {
-      Duration: MENU_TIMEOUT,
-      Title: 'Call Experience Feedback',
+      Duration: timeoutMenu,
+      Title: promptTitle,
       Text: 'How would you rate your call today?',
       FeedbackId: 'call_rating',
       'Option.1': excellentText,
@@ -374,7 +386,7 @@ function initialMenu() {
     initVariables();
     /*
     xapi.command('UserInterface Message Prompt Display', {
-      Title: 'Call Experience Feedback?',
+      Title: promptTitle,
       Text: 'Call did not complete. What happened?',
       FeedbackId: 'no_call_rating',
       'Option.1': 'I dialled the wrong number!',
@@ -387,37 +399,37 @@ function initialMenu() {
 
 // Process enabled services
 async function processRequest() {
-  if (HTTP_ENABLED) {
+  if (httpEnabled) {
     postJSON();
   }
-  if (SERVICENOW_ENABLED && qualityInfo.rating !== 1) {
+  if (snowEnabled && ((qualityInfo.rating === 3) || (qualityInfo.rating === 2 && snowRaiseAvg))) {
     await raiseTicket();
   }
-  if (WEBEX_ENABLED) {
+  if (webexEnabled) {
     await postContent();
   }
   await sleep(600);
   if (showFeedback) {
     if (errorResult) {
-      await xapi.command('UserInterface Message Alert Display', {
+      await xapi.Command.UserInterface.Message.Alert.Display({
         Title: 'Error Encountered',
-        Text: 'Sorry we were unable to submit your feedback. Please advise your IT Support team of this error.',
+        Text: 'Sorry we were unable to submit your feedback.<br>Please advise your IT Support team of this error.',
         Duration: 20,
       });
       return;
     }
     let textContent = 'Thanks for your feedback!';
     if (qualityInfo.incident) {
-      textContent = `Thanks for your feedback, Incident ${qualityInfo.incident} raised.`;
+      textContent += `<br>Incident ${qualityInfo.incident} raised.`;
     }
-    await xapi.command('UserInterface Message Alert Display', {
+    await xapi.Command.UserInterface.Message.Alert.Display({
       Title: 'Acknowledgement',
       Text: textContent,
       Duration: 5,
     });
   }
   await sleep(3000);
-  console.debug('Init Variables');
+  if (debugMode) console.debug('Init Variables');
   initVariables();
 }
 
@@ -428,40 +440,10 @@ xapi.Event.CallDisconnect.on((event) => {
   initialMenu();
 });
 
-xapi.Status.SystemUnit.State.NumberOfActiveCalls.on(async (numCalls) => {
-  // Capture WebRTC Calls
-  if (numCalls === '1' && !callDestination) {
-    let call;
-    try {
-      [call] = await xapi.Status.Call.get();
-    } catch (e) {
-      // No Active Call
-      return;
-    }
-    if (call.Protocol === 'WebRTC') {
-      callType = 'webrtc';
-      callDestination = call.CallbackNumber;
-      // Matched WebRTC Call
-      if (call.CallbackNumber.match(msftDomain)) {
-        // Matched Teams Call
-        callType = 'msft';
-        if (DEBUG_MODE) console.debug(`[${callType}] ${callDestination}`);
-        return;
-      }
-      if (call.CallbackNumber.match(googleDomain)) {
-        // Matched Google Call
-        callType = 'google';
-        if (DEBUG_MODE) console.debug(`[${callType}] ${callDestination}`);
-        return;
-      }
-      // Fallback WebRTC Call
-      if (DEBUG_MODE) console.debug(`[${callType}] ${callDestination}`);
-    }
+async function processCall() {
+  if (callMatched) {
+    return;
   }
-});
-
-// Capture Call Destination
-xapi.Event.OutgoingCallIndication.on(async () => {
   let call;
   try {
     [call] = await xapi.Status.Call.get();
@@ -469,54 +451,92 @@ xapi.Event.OutgoingCallIndication.on(async () => {
     // No Active Call
     return;
   }
+
+  if (call.Protocol === 'WebRTC') {
+    callType = 'webrtc';
+    callDestination = call.CallbackNumber;
+    // Matched WebRTC Call
+    if (call.CallbackNumber.match(msftDomain)) {
+      // Matched Teams Call
+      callType = 'msft';
+      callMatched = true;
+      if (debugMode) console.debug(`[${callType}] ${callDestination}`);
+      return;
+    }
+    if (call.CallbackNumber.match(googleDomain)) {
+      // Matched Google Call
+      callType = 'google';
+      callMatched = true;
+      if (debugMode) console.debug(`[${callType}] ${callDestination}`);
+      return;
+    }
+    // Fallback WebRTC Call
+    if (debugMode) console.debug(`[${callType}] ${callDestination}`);
+    return;
+  }
+
   // Default Call Type
   callType = 'sip';
   callDestination = call.CallbackNumber;
   if (call.CallbackNumber.match(vimtDomain)) {
     // Matched VIMT Call
     callType = 'vimt';
-    if (DEBUG_MODE) console.debug(`[${callType}] ${callDestination}`);
+    callMatched = true;
+    if (debugMode) console.debug(`[${callType}] ${callDestination}`);
     return;
   }
   if (call.CallbackNumber.match('.webex.com')) {
     // Matched Webex Call
     callType = 'webex';
-    if (DEBUG_MODE) console.debug(`[${callType}] ${callDestination}`);
+    callMatched = true;
+    if (debugMode) console.debug(`[${callType}] ${callDestination}`);
     return;
   }
   if (call.CallbackNumber.match(zoomDomain)) {
     // Matched Zoom Call
     callType = 'zoom';
-    if (DEBUG_MODE) console.debug(`[${callType}] ${callDestination}`);
+    callMatched = true;
+    if (debugMode) console.debug(`[${callType}] ${callDestination}`);
     return;
   }
-  console.log(JSON.stringify(call));
   if (call.DeviceType === 'Endpoint' && call.CallbackNumber.match('^[^.]*$')) {
     // Matched Endpoint/User Call
     callType = 'endpoint';
     callDestination = `${call.DisplayName}: ${call.CallbackNumber})`;
-    if (DEBUG_MODE) console.debug(`[${callType}] ${callDestination}`);
+    if (debugMode) console.debug(`[${callType}] ${callDestination}`);
     return;
   }
   // Fallback SIP Call
-  if (DEBUG_MODE) console.debug(`[${callType}] ${callDestination}`);
+  if (debugMode) console.debug(`[${callType}] ${callDestination}`);
+}
+
+xapi.Status.SystemUnit.State.NumberOfActiveCalls.on(async (numCalls) => {
+  console.log(numCalls);
+  if (numCalls === '1') {
+    processCall();
+  }
+});
+
+// Capture Call Destination
+xapi.Event.OutgoingCallIndication.on(() => {
+  processCall();
 });
 
 // Process responses to TextInput prompts
-xapi.event.on('UserInterface Message TextInput Response', async (event) => {
+xapi.Event.UserInterface.Message.TextInput.Response.on(async (event) => {
   switch (event.FeedbackId) {
     case 'feedback_step2':
       qualityInfo.feedback = event.Text;
       await sleep(200);
       xapi.command('UserInterface Message TextInput Display', {
-        Duration: FOLLOWUP_TIMEOUT,
+        Duration: timeoutFollowup,
         FeedbackId: 'feedback_step3',
         InputType: 'SingleLine',
         KeyboardState: 'Open',
         Placeholder: 'Email Address',
         SubmitText: 'Submit',
         Text: 'Please advise your email address (optional)',
-        Title: 'Call Experience Feedback',
+        Title: promptTitle,
       });
       break;
     case 'feedback_step3':
@@ -524,12 +544,12 @@ xapi.event.on('UserInterface Message TextInput Response', async (event) => {
       processRequest();
       break;
     default:
-      console.debug('Unhandled Response');
+      console.warn('Unhandled TextInput.Response');
   }
 });
 
 // Process responses to Message prompts
-xapi.event.on('UserInterface Message Prompt Response', async (event) => {
+xapi.Event.UserInterface.Message.Prompt.Response.on(async (event) => {
   switch (event.FeedbackId) {
     case 'call_rating':
       voluntaryRating = true;
@@ -545,15 +565,15 @@ xapi.event.on('UserInterface Message Prompt Response', async (event) => {
           qualityInfo.rating = 3; // Poor
           break;
         default:
-          console.debug('Unhandled Response');
+          console.warn('Unhandled call_rating Prompt.Response');
           return;
       }
       // Send Logs for Average/Poor Ratings
       if (!skipLog) { xapi.Command.Logging.SendLogs(); }
       await sleep(200);
-      xapi.command('UserInterface Message Prompt Display', {
-        Duration: FOLLOWUP_TIMEOUT,
-        Title: 'Call Experience Feedback',
+      xapi.Command.UserInterface.Message.Prompt.Display({
+        Duration: timeoutFollowup,
+        Title: promptTitle,
         Text: `What is the primary issue for your rating of ${formatRating(qualityInfo.rating)}?`,
         FeedbackId: 'feedback_step1',
         'Option.1': formatIssue(1), // Audio/Video
@@ -573,32 +593,32 @@ xapi.event.on('UserInterface Message Prompt Response', async (event) => {
           qualityInfo.issue = 3; // Other
           break;
         default:
-          console.debug('Unhandled Response');
+          console.warn('Unhandled feedback_step1 Prompt.Response');
           return;
       }
       await sleep(200);
-      xapi.command('UserInterface Message TextInput Display', {
-        Duration: FOLLOWUP_TIMEOUT,
+      xapi.Command.UserInterface.Message.TextInput.Display({
+        Duration: timeoutFollowup,
         FeedbackId: 'feedback_step2',
         InputType: 'SingleLine',
         KeyboardState: 'Open',
         Placeholder: 'Additional details here',
         SubmitText: 'Submit',
         Text: 'Please provide any additional details (optional)',
-        Title: 'Call Experience Feedback',
+        Title: promptTitle,
       });
       break;
     default:
-      console.debug('Unhandled Response');
+      console.warn('Unhandled Prompt.Response');
   }
 });
 
 // Process Clear/Cancel/Closure of prompt dialogues
-xapi.event.on('UserInterface Message Prompt Cleared', (event) => {
+xapi.Event.UserInterface.Message.Prompt.Cleared.on((event) => {
   showFeedback = false;
   switch (event.FeedbackId) {
     case 'call_rating':
-      if (EXCELLENT_DEFAULT) {
+      if (defaultExcellent) {
         qualityInfo.rating = 1;
         processRequest();
       } else {
@@ -609,12 +629,12 @@ xapi.event.on('UserInterface Message Prompt Cleared', (event) => {
       processRequest();
       return;
     default:
-      console.debug('Unhandled Response');
+      console.warn('Unhandled Prompt.Cleared');
   }
 });
 
 // Process Clear/Cancel/Closure of TextInput dialogues
-xapi.event.on('UserInterface Message TextInput Clear', (event) => {
+xapi.Event.UserInterface.Message.TextInput.Clear.on((event) => {
   showFeedback = false;
   switch (event.FeedbackId) {
     case 'feedback_step2':
@@ -622,12 +642,12 @@ xapi.event.on('UserInterface Message TextInput Clear', (event) => {
       processRequest();
       return;
     default:
-      console.debug('Unhandled Response');
+      console.warn('Unhandled TextInput.Clear');
   }
 });
 
 // Debugging Buttons
-xapi.event.on('UserInterface Extensions Panel Clicked', (event) => {
+xapi.Event.UserInterface.Extensions.Panel.Clicked.on((event) => {
   if (event.PanelId === 'test_services') {
     qualityInfo.rating = 3;
     qualityInfo.reporter = 'aileen.mottern@example.com';
@@ -651,16 +671,16 @@ xapi.event.on('UserInterface Extensions Panel Clicked', (event) => {
 // Initialize Function
 async function init() {
   // Get System Name / Contact Name
-  systemInfo.systemName = await xapi.status.get('UserInterface ContactInfo Name');
+  systemInfo.systemName = await xapi.Status.UserInterface.ContactInfo.Name.get();
   // Get System SN
-  systemInfo.serialNumber = await xapi.status.get('SystemUnit Hardware Module SerialNumber');
+  systemInfo.serialNumber = await xapi.Status.SystemUnit.Hardware.Module.SerialNumber.get();
   if (systemInfo.systemName === '') {
     systemInfo.systemName = systemInfo.serialNumber;
   }
   // Get SW Version
-  systemInfo.softwareVersion = await xapi.status.get('SystemUnit Software Version');
+  systemInfo.softwareVersion = await xapi.Status.SystemUnit.Software.Version.get();
   // HTTP Client needed for sending outbound requests
-  await xapi.config.set('HttpClient Mode', 'On');
+  await xapi.Config.HttpClient.Mode.set('On');
   initVariables();
 }
 
