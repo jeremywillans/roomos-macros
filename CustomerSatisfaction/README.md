@@ -4,17 +4,18 @@
 
 Macro for showing a Customer Satisfaction survey after each call.
 
-Allows data to be posted to a Webex Space, sent to a HTTP Server and/or an Incident raised in Service Now
+Allows data to be posted to a Webex Space, sent to a HTTP Server (such as Power Bi or Loki Logging) and/or an Incident raised in Service Now
 
 Provides 4 simple questions
 - Satisfaction (Excellent, Average, Poor)
 - Issue (Audio/Video, Content Sharing, Other)
 - Feedback
-- Email Address (if provided, will link to Caller in SNOW)
+- Email Address (if provided, will link to Caller in Service Now)
 
 Does not require all questions to be completed for data to be captured, any data entered will be used for processing.
 
-![img1.png](img/img1.png)![img2.png](img/img2.png)
+![img1.png](img/img1.png)
+![img2.png](img/img2.png)
 
 ## Prerequisites
 
@@ -26,12 +27,13 @@ The following items are needed, depending on the enabled services.
 - The RoomId of the destination Webex space. These example methods can be used to get the Room Id
   - Using the [List Rooms](https://developer.webex.com/docs/api/v1/rooms/list-rooms) Developer API
   - Adding `astronaut@webex.bot` to the space (bot will leave and 1:1 you the Id)
-  - 1:1 Message `astronaut@webex.bot`, with an @Mention of the Space Name
 
 **Service Now**
 - A User account with the `sn_incident_write` permission
 - The URL of your Service Now instance
 - Credentials for the above user account, encoded in Base64 in the following format `username:password`
+- Macro searching CMDB using Serial Number to match CI Entity
+- Extra Parameters (such as Assignment group) can also be passed to Service Now
 
 **HTTP JSON**
 - A remote service capable of receiving HTTP POST messages, including Power BI Streaming Dataset.
@@ -41,7 +43,7 @@ The following items are needed, depending on the enabled services.
   {"timestamp":1662605028489,"system":"Test_Endpoint","serial":"FOC123456AA","software":"ce10.19.1.2.bb4292d4368","rating":2,"rating_fmt":"Average","destination":"spark:123456789@webex.com","call_type":"webex","duration":15,"duration_fmt":"15 seconds","cause":"LocalDisconnect","issue":1,"issue_fmt":"Audio/Video","feedback":"Example feedback","reporter":"user@example.com","voluntary":true}
   ```
 
-  **Note:** If enabling the Power BI option, the timestamp (normally EPOC) is modified to the 'DateTime' format which is supported for the streaming dataset.
+  **Note:** If enabling the Power Bi option, the timestamp (normally EPOC) is modified to the 'DateTime' format which is supported for the streaming dataset.
 
   Example API Info for PowerBI
   
