@@ -174,7 +174,7 @@ class RoomRelease {
       || (this.o.detectUltrasound && this.metrics.ultrasound); // Ultrasound detection
 
     // If ultrasound is required, test against people presence status
-    if (this.o.requireUltrasound && currentStatus) {
+    if (this.o.requireUltrasound && this.metrics.peoplePresence) {
       currentStatus = this.metrics.peoplePresence && this.metrics.ultrasound;
     }
 
