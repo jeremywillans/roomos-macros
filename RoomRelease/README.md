@@ -4,7 +4,6 @@ Macro designed to automatically release a room booking based on occupancy metric
 
 The following metrics can be used for this calculation
 - People Presence (Head Detection)
-- Room Ultrasound
 - Sound Levels
 - Active Call
 - Presentation Sharing
@@ -16,6 +15,8 @@ This prompt, along with playing an announcement tone, will display for 60 second
 Note: there is new a new parameter (`initialReleaseDelay`) allowing you to define an initial delay (from booking start) before invoking the countdown and releasing the room.
 
 Additionally, there is built in functionality to ignore the release of larger bookings (default 5+ hours), such as all day events which may not start on time.
+
+#### Now also available as a [Workspace Integration](https://github.com/jeremywillans/wi-room-release)
 
 Example Screenshots -
 

@@ -4,7 +4,7 @@
 # Room Release Macro
 # Written by Jeremy Willans
 # https://github.com/jeremywillans/roomos-macros
-# Version: 1.3
+# Version: 1.4
 #
 # USE AT OWN RISK, MACRO NOT FULLY TESTED NOR SUPPLIED WITH ANY GUARANTEE
 #
@@ -17,6 +17,7 @@
 # 1.1 20230814 Revise Ultrasound detections
 # 1.2 20230815 Refactor code and add more commentary
 # 1.3 20230824 Refactor as Class module and implement ultrasound requirement
+# 1.4 20230915 Remove Ultrasound, refactor xapi commands and improve error handling
 #
 */
 // eslint-disable-next-line import/no-unresolved
@@ -25,8 +26,6 @@ import xapi from 'xapi';
 const rrOptions = {
   // Occupancy Detections
   detectSound: false, // Use sound level to consider room occupied (set level below)
-  detectUltrasound: false, // Use Ultrasound for presence detection
-  requireUltrasound: false, // Require Ultrasound detection (eg. glass walls)
   detectActiveCalls: true, // Use active call for detection (inc airplay)
   detectInteraction: true, // UI extensions (panel, button, etc) to detect presence.
   detectPresentation: true, // Use presentation sharing for detection
@@ -46,23 +45,17 @@ const rrOptions = {
   periodicInterval: 2, // (Mins) duration to perform periodic occupancy checks
 
   // Other Parameters
+  testMode: false, // used for testing, prevents the booking from being removed
   playAnnouncement: true, // Play announcement tone during check in prompt
   feedbackId: 'alertResponse', // identifier assigned to prompt response
-  debugMode: true, // Enable debug logging
+  logDetailed: true, // enable detailed logging
 };
 
 // ----- EDIT BELOW THIS LINE AT OWN RISK ----- //
 
-// Enable Ultrasound if set to required (and not enabled)
-if (rrOptions.requireUltrasound && !rrOptions.detectUltrasound) {
-  console.warn('Ultrasound required but disabled, activating...');
-  rrOptions.detectUltrasound = true;
-}
-
 // Room Release Class
 class RoomRelease {
-  constructor(id) {
-    this.id = id;
+  constructor() {
     this.o = rrOptions;
     this.moveAlert = false;
     this.feedbackId = rrOptions.feedbackId;
@@ -80,7 +73,6 @@ class RoomRelease {
     this.metrics = {
       peopleCount: 0,
       peoplePresence: false,
-      ultrasound: false,
       inCall: false,
       presenceSound: false,
       sharing: false,
@@ -89,17 +81,23 @@ class RoomRelease {
 
   // Display check in prompt and play announcement tone
   promptUser() {
-    xapi.Command.UserInterface.Message.Prompt.Display({
+    xapi.command('UserInterface.Message.Prompt.Display', {
       Title: 'Unoccupied Room',
       Text: 'Please Check-In below to retain this Room Booking.',
       FeedbackId: this.feedbackId,
       'Option.1': 'Check-In',
-    }).catch((error) => { console.error(`${this.id}: ${error.message}`); });
+    }).catch((error) => {
+      console.error('Unable to display Check-in prompt');
+      console.debug(error.message);
+    });
 
     if (!this.o.playAnnouncement) return;
-    xapi.Command.Audio.Sound.Play({
+    xapi.command('Audio.Sound.Play', {
       Loop: 'Off', Sound: 'Announcement',
-    }).catch((error) => { console.error(`${this.id}: ${error.message}`); });
+    }).catch((error) => {
+      console.error('Unable to play announcement tone');
+      console.debug(error.message);
+    });
   }
 
   // OSD countdown message for check in
@@ -107,7 +105,7 @@ class RoomRelease {
     this.alertDuration -= 1;
     if (this.alertDuration <= 0) {
       clearInterval(this.alertInterval);
-      xapi.Command.UserInterface.Message.TextLine.Clear();
+      xapi.command('UserInterface.Message.TextLine.Clear').catch(() => {});
       return;
     }
 
@@ -119,8 +117,10 @@ class RoomRelease {
       msgBody.y = 2000;
       msgBody.x = 5000;
     }
-    xapi.Command.UserInterface.Message.TextLine.Display(msgBody)
-      .catch((error) => { console.error(`${this.id}: ${error.message}`); });
+    xapi.command('UserInterface.Message.TextLine.Display', msgBody).catch((error) => {
+      console.error('Unable to display Check-in prompt');
+      console.debug(error.message);
+    });
 
     // Forced message display every 5 seconds
     if (this.alertDuration % 5 === 0) {
@@ -130,8 +130,8 @@ class RoomRelease {
 
   // Clear existing alerts
   clearAlerts() {
-    xapi.Command.UserInterface.Message.Prompt.Clear({ FeedbackId: this.feedbackId });
-    xapi.Command.UserInterface.Message.TextLine.Clear();
+    xapi.command('UserInterface.Message.Prompt.Clear', { FeedbackId: this.feedbackId }).catch(() => {});
+    xapi.command('UserInterface.Message.TextLine.Clear').catch(() => {});
     clearTimeout(this.deleteTimeout);
     clearInterval(this.alertInterval);
     this.roomIsEmpty = false;
@@ -142,49 +142,42 @@ class RoomRelease {
   async configureCodec() {
     try {
       // Get codec platform
-      const platform = await xapi.Status.SystemUnit.ProductPlatform.get();
+      const platform = await xapi.status.get('SystemUnit.ProductPlatform');
       // if matches desk or board series, flag that the on screen alert needs to be moved up
       if (platform.toLowerCase().includes('desk') || platform.toLowerCase().includes('board')) {
         this.moveAlert = true;
       }
-      console.info(`${this.id}: Processing Codec configurations...`);
-      await xapi.Config.HttpClient.Mode.set('On');
-      await xapi.Config.RoomAnalytics.PeopleCountOutOfCall.set('On');
-      await xapi.Config.RoomAnalytics.PeoplePresenceDetector.set('On');
+      console.info('Processing Codec configurations...');
+      await xapi.config.set('HttpClient.Mode', 'On');
+      await xapi.config.set('RoomAnalytics.PeopleCountOutOfCall', 'On');
+      await xapi.config.set('RoomAnalytics.PeoplePresenceDetector', 'On');
     } catch (error) {
+      console.error('Unable to configure codec');
       console.warn(error.message);
     }
   }
 
   // Determine if room is occupied based on enabled detections
   isRoomOccupied() {
-    if (this.o.debugMode) {
-      let message = `${this.id}: Presence: ${this.metrics.peoplePresence} | Count: ${this.metrics.peopleCount}`;
-      // eslint-disable-next-line no-nested-ternary
-      message += ` | [${this.o.requireUltrasound ? 'R' : this.o.requireUltrasound ? 'X' : ' '}] Ultrasound: ${this.metrics.ultrasound}`;
+    if (this.o.logDetailed) {
+      let message = `Presence: ${this.metrics.peoplePresence} | Count: ${this.metrics.peopleCount}`;
       message += ` | [${this.o.detectActiveCalls ? 'X' : ' '}] In Call: ${this.metrics.inCall}`;
       message += ` | [${this.o.detectSound ? 'X' : ' '}] Sound (> ${this.o.soundLevel}): ${this.metrics.presenceSound}`;
       message += ` | [${this.o.detectPresentation ? 'X' : ' '}] Share: ${this.metrics.sharing}`;
       console.debug(message);
     }
-    let currentStatus = this.metrics.peoplePresence // People presence
+    const currentStatus = this.metrics.peoplePresence // People presence
       || (this.o.detectActiveCalls && this.metrics.inCall) // Active call detection
       || (this.o.detectSound && this.metrics.presenceSound) // Sound detection
-      || (this.o.detectPresentation && this.metrics.sharing) // Presentation detection
-      || (this.o.detectUltrasound && this.metrics.ultrasound); // Ultrasound detection
+      || (this.o.detectPresentation && this.metrics.sharing); // Presentation detection
 
-    // If ultrasound is required, test against people presence status
-    if (this.o.requireUltrasound && this.metrics.peoplePresence) {
-      currentStatus = this.metrics.peoplePresence && this.metrics.ultrasound;
-    }
-
-    if (this.o.debugMode) console.debug(`${this.id}: OCCUPIED: ${currentStatus}`);
+    if (this.o.logDetailed) console.debug(`OCCUPIED: ${currentStatus}`);
     return currentStatus;
   }
 
   // Countdown timer before meeting decline
   startCountdown() {
-    if (this.o.debugMode) console.debug(`${this.id}: Start countdown initiated`);
+    if (this.o.logDetailed) console.debug('Start countdown initiated');
     this.countdownActive = true;
     this.promptUser();
 
@@ -202,10 +195,10 @@ class RoomRelease {
         this.processOccupancy();
         return;
       }
-      if (this.o.debugMode) console.debug(`${this.id}: Initiate Booking removal from device.`);
-      xapi.Command.UserInterface.Message.Prompt.Clear({ FeedbackId: this.feedbackId });
-      xapi.Command.Audio.Sound.Stop();
-      xapi.Command.UserInterface.Message.TextLine.Clear();
+      if (this.o.logDetailed) console.debug('Initiate Booking removal from device.');
+      xapi.command('UserInterface.Message.Prompt.Clear', { FeedbackId: this.feedbackId }).catch(() => {});
+      xapi.command('Audio.Sound.Stop').catch(() => {});
+      xapi.command('UserInterface.Message.TextLine.Clear').catch(() => {});
       clearInterval(this.periodicUpdate);
 
       // We get the updated meetingId to send meeting decline
@@ -213,25 +206,29 @@ class RoomRelease {
       let bookingId;
       try {
         // get webex booking id for current booking on codec
-        bookingId = await xapi.Status.Bookings.Current.Id.get();
+        bookingId = await xapi.status.get('Bookings.Current.Id');
         // use booking id to retrieve booking data, specifically meeting id
-        booking = await xapi.Command.Bookings.Get({ Id: bookingId });
-        if (this.o.debugMode) console.debug(`${this.id}: ${bookingId} contains ${booking.Booking.MeetingId}`);
+        booking = await xapi.command('Bookings.Get', { Id: bookingId });
+        if (this.o.logDetailed) console.debug(`${bookingId} contains ${booking.Booking.MeetingId}`);
       } catch (error) {
-        console.error(`${this.id}: Unable to retrieve meeting info for ${bookingId}`);
-        console.debug(`${this.id}: ${error.message}`);
+        console.error(`Unable to retrieve meeting info for ${bookingId}`);
+        console.debug(error.message);
         return;
       }
       try {
-        // attempt decline meeting to control hub
-        await xapi.Command.Bookings.Respond({
-          Type: 'Decline',
-          MeetingId: booking.Booking.MeetingId,
-        });
-        if (this.o.debugMode) console.debug(`${this.id}: Booking declined.`);
+        if (this.o.testMode) {
+          if (this.o.logDetailed) console.info('Test mode enabled, booking decline skipped.');
+        } else {
+          // attempt decline meeting to control hub
+          await xapi.command('Bookings.Respond', {
+            Type: 'Decline',
+            MeetingId: booking.Booking.MeetingId,
+          });
+          if (this.o.logDetailed) console.debug('Booking declined.');
+        }
       } catch (error) {
-        console.error(`${this.id}: Unable to respond to meeting ${booking.Booking.MeetingId}`);
-        console.debug(`${this.id}: ${error.message}`);
+        console.error(`Unable to respond to meeting ${booking.Booking.MeetingId}`);
+        console.debug(error.message);
       }
       this.bookingIsActive = false;
       this.lastFullTimestamp = 0;
@@ -243,8 +240,8 @@ class RoomRelease {
   // Promise return function
   getData(command) {
     return xapi.status.get(command).catch((error) => {
-      console.warning(`${this.id}: Unable to perform command: ${command}`);
-      if (this.o.debugMode) console.debug(`${this.id}: ${error.message}`);
+      console.warn(`Unable to perform command: ${command}`);
+      console.debug(error.message);
       return -1;
     });
   }
@@ -254,17 +251,14 @@ class RoomRelease {
     try {
       const results = await Promise.all([
         this.getData('SystemUnit.State.NumberOfActiveCalls'),
-        this.getData('RoomAnalytics.UltrasoundPresence'),
-        this.getData('RoomAnalytics.PeoplePresence'),
-        this.getData('RoomAnalytics.PeopleCount.Current'),
-        this.getData('RoomAnalytics.Sound.Level.A'),
+        this.getData('RoomAnalytics.*'),
       ]);
-      // process results
+
+      // evaluate the results
       const numCalls = Number(results[0]);
-      const ultrasound = results[1] === 'Yes';
-      const presence = results[2] === 'Yes';
-      const peopleCount = Number(results[3]);
-      const soundResult = Number(results[4]);
+      const presence = results[1].PeoplePresence === 'Yes';
+      const peopleCount = Number(results[1].PeopleCount.Current);
+      const soundResult = Number(results[1].Sound.Level.A);
 
       // test for local sharing xapi
       const sharing = await this.getData('Conference.Presentation.LocalInstance');
@@ -273,7 +267,6 @@ class RoomRelease {
       // Process people metrics
       this.metrics.peopleCount = peopleCount === -1 ? 0 : peopleCount;
       this.metrics.peoplePresence = presence;
-      this.metrics.ultrasound = ultrasound;
 
       // Process active calls
       if (numCalls > 0 && this.o.detectActiveCalls) {
@@ -293,8 +286,8 @@ class RoomRelease {
 
       if (processResults) this.processOccupancy();
     } catch (error) {
-      console.warn(`${this.id}: Unable to process occupancy metrics from Codec`);
-      if (this.o.debugMode) console.debug(`${this.id}: ${error.message}`);
+      console.warn('Unable to process occupancy metrics from Codec');
+      console.debug(error.message);
     }
   }
 
@@ -304,17 +297,18 @@ class RoomRelease {
     if (this.isRoomOccupied()) {
       // is room newly occupied
       if (this.lastFullTimestamp === 0) {
-        if (this.o.debugMode) console.debug(`${this.id}: Room occupancy detected - updating full timestamp...`);
+        this.clearAlerts();
+        if (this.o.logDetailed) console.debug('Room occupancy detected - updating full timestamp...');
         this.lastFullTimestamp = Date.now();
         this.lastEmptyTimestamp = 0;
       // has room been occupied longer than consideredOccupied
       } else if (Date.now() > (this.lastFullTimestamp + (this.o.consideredOccupied * 60000))) {
-        if (this.o.debugMode) console.debug(`${this.id}: consideredOccupied reached - room considered occupied`);
+        if (this.o.logDetailed) console.debug('consideredOccupied reached - room considered occupied');
         this.roomIsEmpty = false;
         this.lastFullTimestamp = Date.now();
         if (this.o.occupiedStopChecks) {
           // stop further checks as room is considered occupied
-          if (this.o.debugMode) console.debug(`${this.id}: future checks stopped for this booking`);
+          if (this.o.logDetailed) console.debug('future checks stopped for this booking');
           this.bookingIsActive = false;
           this.listenerShouldCheck = false;
           clearInterval(this.periodicUpdate);
@@ -322,13 +316,13 @@ class RoomRelease {
       }
     // is room newly empty
     } else if (this.lastEmptyTimestamp === 0) {
-      if (this.o.debugMode) console.debug(`${this.id}: Room empty detected - updating empty timestamp...`);
+      if (this.o.logDetailed) console.debug('Room empty detected - updating empty timestamp...');
       this.lastEmptyTimestamp = Date.now();
       this.lastFullTimestamp = 0;
     // has room been empty longer than emptyBeforeRelease
     } else if (Date.now() > (this.lastEmptyTimestamp + (this.o.emptyBeforeRelease * 60000))
       && !this.roomIsEmpty) {
-      if (this.o.debugMode) console.debug(`${this.id}: emptyBeforeRelease reached - room considered empty`);
+      if (this.o.logDetailed) console.debug('emptyBeforeRelease reached - room considered empty');
       this.roomIsEmpty = true;
     }
 
@@ -336,14 +330,14 @@ class RoomRelease {
     if (this.roomIsEmpty && !this.countdownActive) {
       // check we have not yet reached the initial delay
       if (Date.now() < this.initialDelay) {
-        if (this.o.debugMode) console.debug(`${this.id}: Booking removal bypassed as meeting has not yet reached initial delay`);
+        if (this.o.logDetailed) console.debug('Booking removal bypassed as meeting has not yet reached initial delay');
         return;
       }
       // pre-countdown metrics collection
       await this.getMetrics(false);
       // pre-countdown occupancy check
       if (this.isRoomOccupied()) return;
-      console.warn(`${this.id}: Room is empty start countdown for delete booking`);
+      console.warn('Room is empty start countdown for delete booking');
       this.startCountdown();
     }
   }
@@ -351,49 +345,54 @@ class RoomRelease {
   // Process meeting logic
   async processBooking(id) {
     // Validate booking
-    const availability = await xapi.Status.Bookings.Availability.Status.get();
-    if (availability === 'BookedUntil') {
-      const booking = await xapi.Command.Bookings.Get({ Id: id });
-      this.bookingIsActive = true;
-      this.listenerShouldCheck = true;
+    try {
+      const availability = await xapi.status.get('Bookings.Availability.Status');
+      if (availability === 'BookedUntil') {
+        const booking = await xapi.command('Bookings.Get', { Id: id });
+        this.bookingIsActive = true;
+        this.listenerShouldCheck = true;
 
-      // Calculate meeting length
-      let duration = 0;
-      let startTime;
-      try {
-        const t = booking.Booking.Time;
-        startTime = Date.parse(t.StartTime);
-        duration = ((Number(t.SecondsUntilEnd) + Number(t.SecondsSinceStart)) / 3600).toFixed(2);
-      } catch (error) {
-        console.warn(`${this.id}: Unable to parse Meeting Length`);
-        if (this.o.debugMode) console.debug(`${this.id}: ${error.message}`);
+        // Calculate meeting length
+        let duration = 0;
+        let startTime;
+        try {
+          const t = booking.Booking.Time;
+          startTime = Date.parse(t.StartTime);
+          duration = ((Number(t.SecondsUntilEnd) + Number(t.SecondsSinceStart)) / 3600).toFixed(2);
+        } catch (error) {
+          console.warn('Unable to parse Meeting Length');
+          console.debug(error.message);
+        }
+        // do not process meetings if it equals/exceeds defined meeting length
+        if (this.o.logDetailed) console.debug(`calculated meeting length: ${duration}`);
+        if (duration >= this.o.ignoreLongerThan) {
+          if (this.o.logDetailed) console.debug(`meeting ignored as equal/longer than ${this.o.ignoreLongerThan} hours`);
+          this.listenerShouldCheck = false;
+          this.bookingIsActive = false;
+          return;
+        }
+
+        // define initial delay before attempting release
+        this.initialDelay = startTime + this.o.initialReleaseDelay * 60000;
+
+        // get initial occupancy data from the codec
+        await this.getMetrics();
+
+        // Update checks to periodically validate room status.
+        this.periodicUpdate = setInterval(() => {
+          if (this.o.logDetailed) console.debug('initiating periodic processing of occupancy metrics');
+          this.getMetrics();
+        }, (this.o.periodicInterval * 60000) + 1000);
+      } else {
+        this.initialDelay = 0;
+        this.lastFullTimestamp = 0;
+        this.lastEmptyTimestamp = 0;
+        this.roomIsEmpty = false;
+        console.warn('Booking was detected without end time!');
       }
-      // do not process meetings if it equals/exceeds defined meeting length
-      if (this.o.debugMode) console.debug(`${this.id}: calculated meeting length: ${duration}`);
-      if (duration >= this.o.ignoreLongerThan) {
-        if (this.o.debugMode) console.debug(`${this.id}: meeting ignored as equal/longer than ${this.o.ignoreLongerThan} hours`);
-        this.listenerShouldCheck = false;
-        this.bookingIsActive = false;
-        return;
-      }
-
-      // define initial delay before attempting release
-      this.initialDelay = startTime + this.o.initialReleaseDelay * 60000;
-
-      // get initial occupancy data from the codec
-      await this.getMetrics();
-
-      // Update checks to periodically validate room status.
-      this.periodicUpdate = setInterval(() => {
-        if (this.o.debugMode) console.debug(`${this.id}: initiating periodic processing of occupancy metrics`);
-        this.getMetrics();
-      }, (this.o.periodicInterval * 60000) + 1000);
-    } else {
-      this.initialDelay = 0;
-      this.lastFullTimestamp = 0;
-      this.lastEmptyTimestamp = 0;
-      this.roomIsEmpty = false;
-      console.warn(`${this.id}: Booking was detected without end time!`);
+    } catch (error) {
+      console.warn('Unable to process process booking');
+      console.debug(error.message);
     }
   }
 
@@ -401,12 +400,12 @@ class RoomRelease {
 
   handlePromptResponse(event) {
     if (event.FeedbackId === this.feedbackId && event.OptionId === '1') {
-      if (this.o.debugMode) console.debug(`${this.id}: Local Check-in performed from Touch Panel`);
+      if (this.o.logDetailed) console.debug('Local Check-in performed from Touch Panel');
       this.clearAlerts();
       this.lastFullTimestamp = Date.now();
       this.lastEmptyTimestamp = 0;
       if (this.o.buttonStopChecks) {
-        if (this.o.debugMode) console.debug(`${this.id}: future checks stopped for this booking`);
+        if (this.o.logDetailed) console.debug('future checks stopped for this booking');
         this.bookingIsActive = false;
         this.listenerShouldCheck = false;
         clearInterval(this.periodicUpdate);
@@ -433,13 +432,10 @@ class RoomRelease {
 
   handleActiveCall(result) {
     if (this.bookingIsActive) {
-      if (this.o.debugMode) console.debug(`${this.id}: Number of active calls: ${result}`);
+      if (this.o.logDetailed) console.debug(`Number of active calls: ${result}`);
       const inCall = Number(result) > 0;
       this.metrics.inCall = inCall;
 
-      if (this.o.detectActiveCalls && inCall) {
-        this.clearAlerts();
-      }
       if (this.listenerShouldCheck) {
         this.processOccupancy();
       }
@@ -448,28 +444,10 @@ class RoomRelease {
 
   handlePeoplePresence(result) {
     if (this.bookingIsActive) {
-      if (this.o.debugMode) console.debug(`${this.id}: Presence: ${result}`);
+      if (this.o.logDetailed) console.debug(`Presence: ${result}`);
       const people = result === 'Yes';
       this.metrics.peoplePresence = people;
 
-      if (people) {
-        this.clearAlerts();
-      }
-      if (this.listenerShouldCheck) {
-        this.processOccupancy();
-      }
-    }
-  }
-
-  handleUltrasoundPresence(result) {
-    if (this.bookingIsActive) {
-      if (this.o.debugMode) console.debug(`${this.id}: Ultrasound: ${result}`);
-      const ultrasound = result === 'Yes';
-      this.metrics.ultrasound = ultrasound;
-
-      if (this.o.detectUltrasound && ultrasound) {
-        this.clearAlerts();
-      }
       if (this.listenerShouldCheck) {
         this.processOccupancy();
       }
@@ -478,13 +456,10 @@ class RoomRelease {
 
   handlePeopleCount(result) {
     if (this.bookingIsActive) {
-      if (this.o.debugMode) console.debug(`${this.id}: People count: ${result}`);
+      if (this.o.logDetailed) console.debug(`People count: ${result}`);
       const people = Number(result);
       this.metrics.peopleCount = people === -1 ? 0 : people;
 
-      if (people > 0) {
-        this.clearAlerts();
-      }
       if (this.listenerShouldCheck) {
         this.processOccupancy();
       }
@@ -494,13 +469,10 @@ class RoomRelease {
   handleSoundDetection(result) {
     // Only process when enabled to reduce log noise
     if (this.bookingIsActive && this.o.detectSound) {
-      if (this.o.debugMode) console.debug(`${this.id}: Sound level: ${result}`);
+      if (this.o.logDetailed) console.debug(`Sound level: ${result}`);
       const level = Number(result);
       this.metrics.presenceSound = level > this.o.soundLevel;
 
-      if (level > this.o.soundLevel) {
-        this.clearAlerts();
-      }
       if (this.listenerShouldCheck) {
         this.processOccupancy();
       }
@@ -510,16 +482,13 @@ class RoomRelease {
   handlePresentationLocalInstance(result) {
     if (this.bookingIsActive) {
       if (result.ghost && result.ghost === 'True') {
-        if (this.o.debugMode) console.debug(`${this.id}: Presentation Stopped: ${result.id}`);
+        if (this.o.logDetailed) console.debug('Presentation stopped');
         this.metrics.sharing = false;
       } else {
-        if (this.o.debugMode) console.debug(`${this.id}: Presentation Started: ${result.id}`);
+        if (this.o.logDetailed) console.debug(`Presentation started: ${result.id}`);
         this.metrics.sharing = true;
       }
 
-      if (this.o.detectPresentation) {
-        this.clearAlerts();
-      }
       if (this.listenerShouldCheck) {
         this.processOccupancy();
       }
@@ -528,9 +497,8 @@ class RoomRelease {
 
   handleInteraction() {
     if (this.bookingIsActive && this.o.detectInteraction) {
-      if (this.o.debugMode) console.debug(`${this.id}: UI interaction detected`);
+      if (this.o.logDetailed) console.debug('UI interaction detected');
 
-      this.clearAlerts();
       this.lastFullTimestamp = Date.now();
       this.lastEmptyTimestamp = 0;
 
@@ -544,63 +512,59 @@ class RoomRelease {
 // Init function
 async function init() {
   // Declare Class
-  const rr = new RoomRelease('RR');
+  const rr = new RoomRelease();
   // clear any lingering alerts
   rr.clearAlerts();
   // ensure codec is configured correctly
   await rr.configureCodec();
   // check for current meeting
-  const currentId = await xapi.Status.Bookings.Current.Id.get();
+  const currentId = await xapi.status.get('Bookings.Current.Id');
   if (currentId) {
     rr.processBooking(currentId);
   }
 
   console.info('--- Processing Room Resource Subscriptions');
   // Process booking start
-  xapi.Event.Bookings.Start.on((event) => {
-    console.log(`${rr.id}: Booking ${event.Id} detected`);
+  xapi.event.on('Bookings.Start', (event) => {
+    console.log(`Booking ${event.Id} detected`);
     rr.processBooking(event.Id);
   });
   // Process booking extension
-  xapi.Event.Bookings.ExtensionRequested.on((event) => {
-    console.log(`${rr.id}: Booking ${event.OriginalMeetingId} updated.`);
+  xapi.event.on('Bookings.ExtensionRequested', (event) => {
+    console.log(`Booking ${event.OriginalMeetingId} updated.`);
     rr.handleBookingExtension(event.OriginalMeetingId);
   });
   // Process booking end
-  xapi.Event.Bookings.End.on((event) => {
-    console.log(`${rr.id}: Booking ${event.Id} ended Stop Checking`);
+  xapi.event.on('Bookings.End', (event) => {
+    console.log(`Booking ${event.Id} ended Stop Checking`);
     rr.handleBookingEnd();
   });
   // Process UI interaction
-  xapi.Event.UserInterface.Extensions.on(() => {
+  xapi.event.on('UserInterface.Extensions', () => {
     rr.handleInteraction();
   });
   // Handle message prompt response
-  xapi.Event.UserInterface.Message.Prompt.Response.on((event) => {
+  xapi.event.on('UserInterface.Message.Prompt.Response', (event) => {
     rr.handlePromptResponse(event);
   });
   // Process active call
-  xapi.Status.SystemUnit.State.NumberOfActiveCalls.on((result) => {
+  xapi.status.on('SystemUnit.State.NumberOfActiveCalls', (result) => {
     rr.handleActiveCall(result);
   });
   // Process presence detection
-  xapi.Status.RoomAnalytics.PeoplePresence.on((result) => {
+  xapi.status.on('RoomAnalytics.PeoplePresence', (result) => {
     rr.handlePeoplePresence(result);
   });
-  // Process ultrasound detection
-  xapi.Status.RoomAnalytics.UltrasoundPresence.on((result) => {
-    rr.handleUltrasoundPresence(result);
-  });
   // Process presentation detection
-  xapi.Status.Conference.Presentation.LocalInstance['*'].on((result) => {
+  xapi.status.on('Conference.Presentation.LocalInstance[*]', (result) => {
     rr.handlePresentationLocalInstance(result);
   });
   // Process people count
-  xapi.Status.RoomAnalytics.PeopleCount.Current.on((result) => {
+  xapi.status.on('RoomAnalytics.PeopleCount.Current', (result) => {
     rr.handlePeopleCount(result);
   });
   // Process sound level
-  xapi.Status.RoomAnalytics.Sound.Level.A.on((result) => {
+  xapi.status.on('RoomAnalytics.Sound.Level.A', (result) => {
     rr.handleSoundDetection(result);
   });
 }
