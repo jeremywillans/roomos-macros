@@ -5,7 +5,7 @@
 # Customer Satisfaction Survey Macro
 # Written by Jeremy Willans
 # https://github.com/jeremywillans/roomos-macros
-# Version: 2.0
+# Version: 2.1
 #
 # USE AT OWN RISK, MACRO NOT FULLY TESTED NOR SUPPLIED WITH ANY GUARANTEE
 #
@@ -26,6 +26,7 @@
 # 1.8 20230609 Add Meeting Type for each call and support PowerBI Streaming Dataset
 # 1.9 20230719 Improve Service Now customizations
 # 2.0 20230817 Refactoring and allow customizing SNOW Tickets raised for Poor and/or Average
+# 2.1 20231115 Update variable to reflect Bot Token, not Bot Id.
 #
 */
 // eslint-disable-next-line import/no-unresolved
@@ -34,7 +35,7 @@ import xapi from 'xapi';
 // Webex Space Parameters
 const webexEnabled = false; // Enable for Webex Space Message Logging
 const roomId = '#### ROOM ID ####'; // Specify a Room ID
-const botId = '#### BOT ID ####'; // Specify a Bot ID
+const botToken = '#### BOT TOKEN ####'; // Specify a Bot Token
 // HTTP JSON Post Parameters
 const httpEnabled = false; // Enable for JSON HTTP POST Destination
 const httpUrl = 'http://10.xx.xx.xx:3000'; // HTTP POST URL (append /loki/api/v1/push if using Loki)
@@ -63,7 +64,7 @@ const timeoutFollowup = 20; // Timeout before remaining survey options are dismi
 
 // ----- EDIT BELOW THIS LINE AT OWN RISK ----- //
 
-const webexAuth = `Authorization: Bearer ${botId}`;
+const webexAuth = `Authorization: Bearer ${botToken}`;
 const contentType = 'Content-Type: application/json';
 const acceptType = 'Accept: application/json';
 const webexMessageUrl = 'https://webexapis.com/v1/messages'; // Message URL
