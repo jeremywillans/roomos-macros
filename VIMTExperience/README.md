@@ -1,12 +1,5 @@
-# VIMTExperience
+# VIMT Experience
 
-Macro for updating the default meeting experience when using VIMT
+VIMT Experience is a Workspace Integration designed to improve the default meeting experience when using Webex CVI
 
-Current Options
-- Grid View Layout as the default layout
-- Hide Non-Video Participants by default
-- Adds Toggle for Hiding Non-Video Participants
-
-## Disclaimer
-
-This macro is NOT guaranteed to be bug free and production quality.
+This macro is now hosted in the [Workspace Integration](https://github.com/jeremywillans/wi-vimt-experience) repository, in the macro directory.
